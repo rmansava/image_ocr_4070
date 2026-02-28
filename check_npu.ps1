@@ -1,0 +1,1 @@
+Get-WmiObject Win32_PnPSignedDriver | Where-Object { $_.DeviceName -like '*NPU*' -or $_.DeviceName -like '*Neural*' -or $_.DeviceName -like '*XDNA*' } | Select-Object DeviceName, DriverVersion | Format-List
