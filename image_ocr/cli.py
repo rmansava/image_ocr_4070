@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
 
     extensions = None
     if args.ext:
-        extensions = {f".{e.lstrip('.')}" for e in args.ext}
+        extensions = {f".{e.lstrip('.').lower()}" for e in args.ext}
 
     model = args.model
     model_tag = args.model_tag or model

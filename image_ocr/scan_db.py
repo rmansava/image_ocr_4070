@@ -121,20 +121,20 @@ def scan_to_db(
     batch = []
     start = time.perf_counter()
 
-    # Support single file input
-    if input_path.is_file():
-        all_images = [input_path] if input_path.suffix.lower() in exts else []
-    else:
-        all_images = []
+    def _iter_images():
+        """Yield image paths one at a time — no full list in memory."""
+        if input_path.is_file():
+            if input_path.suffix.lower() in exts:
+                yield input_path
+            return
         for root, dirs, files in os.walk(input_path):
             dirs.sort()
             folder = Path(root)
-            all_images.extend(
-                folder / f for f in sorted(files)
-                if Path(f).suffix.lower() in exts
-            )
+            for f in sorted(files):
+                if Path(f).suffix.lower() in exts:
+                    yield folder / f
 
-    for img in all_images:
+    for img in _iter_images():
         scan_count += 1
         archive_txt = map_to_archive(img).with_suffix(".txt")
 

@@ -205,10 +205,11 @@ def _prefetch_worker(input_root, pass_num, batch_size, buffer_dir, prefetch_q):
         prefetch_q.put(None)
 
 
-def _flush_worker(flush_q, input_root):
+def _flush_worker(flush_q, input_root, flush_errors):
     """Background thread: writes .txt locally then copies to T:\\archive, cleans buffer.
 
     Marks images as processed in SQL. Runs while GPU works on next batch.
+    Appends (path, error_msg) to flush_errors list so main thread can report them.
     """
     while True:
         item = flush_q.get()
@@ -225,6 +226,7 @@ def _flush_worker(flush_q, input_root):
             _log(f"  Flush error: {exc}")
             # Mark all as errored so they don't block reruns
             for img, _ in results:
+                flush_errors.append((img, f"flush: {exc}"))
                 try:
                     mark_processed(input_root, [img], error=f"flush: {exc}")
                 except Exception:
@@ -246,16 +248,17 @@ def _run_pass(
 ):
     """Run one pass of the pipeline from the SQL index."""
     all_errors = []
+    flush_errors = []  # shared with flush thread for error propagation
 
     prefetch_q = Queue(maxsize=PREFETCH_DEPTH)
-    flush_q = Queue()
+    flush_q = Queue(maxsize=PREFETCH_DEPTH)
 
     prefetch_t = threading.Thread(
         target=_prefetch_worker,
         args=(input_root, pass_num, batch_size, buffer_dir, prefetch_q),
         daemon=True,
     )
-    flush_t = threading.Thread(target=_flush_worker, args=(flush_q, input_root), daemon=True)
+    flush_t = threading.Thread(target=_flush_worker, args=(flush_q, input_root, flush_errors), daemon=True)
     prefetch_t.start()
     flush_t.start()
 
@@ -289,6 +292,7 @@ def _run_pass(
     flush_t.join()
     prefetch_t.join()
 
+    all_errors.extend(flush_errors)
     return all_errors
 
 
