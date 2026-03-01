@@ -60,7 +60,13 @@ class HFVisionEngine:
         # Quantization config
         self.bnb_config = None
         if quantize == "4bit":
-            from transformers import BitsAndBytesConfig
+            try:
+                from transformers import BitsAndBytesConfig
+            except ImportError:
+                raise RuntimeError(
+                    "--quantize 4bit requires bitsandbytes. "
+                    "Install with: pip install bitsandbytes>=0.43"
+                ) from None
             self.bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_compute_dtype=self.torch_dtype,

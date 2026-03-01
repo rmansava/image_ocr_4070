@@ -169,12 +169,13 @@ def _flush_results(results: list[tuple[Path, str]], model_tag: str, batch_dir: P
 
 # ─── Async prefetch / flush ───────────────────────────────────
 
-def _prefetch_worker(input_root, pass_num, batch_size, buffer_dir, prefetch_q):
+def _prefetch_worker(input_root, pass_num, batch_size, buffer_dir, prefetch_q, prefetch_errors):
     """Background thread: reads batches from SQL index, copies images to local SSD.
 
     Stays PREFETCH_DEPTH batches ahead of the GPU. Blocks when queue is full.
     Sends None when no more images. Copy errors for individual files are
     forwarded as part of the batch so the GPU thread can mark them in the DB.
+    Fatal prefetch errors are appended to prefetch_errors for the main thread.
     """
     batch_num = 0
     try:
@@ -197,7 +198,8 @@ def _prefetch_worker(input_root, pass_num, batch_size, buffer_dir, prefetch_q):
             prefetch_q.put((enriched, batch_dir, copy_errors))
             batch_num += 1
     except Exception as exc:
-        _log(f"  Prefetch error: {exc}")
+        _log(f"  PREFETCH FATAL: {exc}")
+        prefetch_errors.append(str(exc))
     finally:
         prefetch_q.put(None)
 
@@ -246,13 +248,14 @@ def _run_pass(
     """Run one pass of the pipeline from the SQL index."""
     all_errors = []
     flush_errors = []  # shared with flush thread for error propagation
+    prefetch_errors = []  # shared with prefetch thread for fatal error propagation
 
     prefetch_q = Queue(maxsize=PREFETCH_DEPTH)
     flush_q = Queue(maxsize=PREFETCH_DEPTH)
 
     prefetch_t = threading.Thread(
         target=_prefetch_worker,
-        args=(input_root, pass_num, batch_size, buffer_dir, prefetch_q),
+        args=(input_root, pass_num, batch_size, buffer_dir, prefetch_q, prefetch_errors),
         daemon=True,
     )
     flush_t = threading.Thread(target=_flush_worker, args=(flush_q, input_root, flush_errors), daemon=True)
@@ -290,6 +293,8 @@ def _run_pass(
     prefetch_t.join()
 
     all_errors.extend(flush_errors)
+    if prefetch_errors:
+        all_errors.append((Path("prefetch"), f"prefetch thread failed: {'; '.join(prefetch_errors)}"))
     return all_errors
 
 
@@ -324,10 +329,11 @@ def run_pipeline(
 
     prev_tag = get_scan_meta(input_root, "model_tag")
 
+    scan_time = get_scan_meta(input_root, "scan_time")
     needs_scan = (
         rescan
         or prev_tag != model_tag
-        or get_scan_meta(input_root, "scan_time") is None
+        or not scan_time  # None or empty string = incomplete/no scan
     )
 
     if needs_scan:

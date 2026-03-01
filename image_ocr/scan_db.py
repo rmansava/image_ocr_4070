@@ -108,6 +108,11 @@ def scan_to_db(
     exts = extensions or IMAGE_EXTENSIONS
     input_root = _input_root_key(input_path)
 
+    # Clear scan_time BEFORE deleting rows. If we crash mid-scan, the next
+    # run will see no scan_time and re-trigger a full rescan.
+    set_scan_meta(input_root, "scan_time", "")
+    set_scan_meta(input_root, "model_tag", model_tag)
+
     conn = _connect()
     cur = conn.cursor()
     cur.fast_executemany = True
@@ -176,10 +181,11 @@ def scan_to_db(
 
     conn.close()
 
-    set_scan_meta(input_root, "model_tag", model_tag)
+    # Set scan_time LAST — this marks the scan as complete. If we crashed
+    # before this point, scan_time is empty and the next run re-scans.
     set_scan_meta(input_root, "input_path", str(input_path))
-    set_scan_meta(input_root, "scan_time", str(time.time()))
     set_scan_meta(input_root, "total_scanned", str(scan_count))
+    set_scan_meta(input_root, "scan_time", str(time.time()))
 
     return new_count, update_count
 
