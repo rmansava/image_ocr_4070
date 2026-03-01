@@ -14,16 +14,10 @@ import time
 from pathlib import Path
 from queue import Queue
 
+from .cli import DEFAULT_PROMPT
 from .scan_db import (
     init_db, scan_to_db, iter_unprocessed, mark_processed,
     get_stats, get_scan_meta, _input_root_key,
-)
-
-DEFAULT_PROMPT = (
-    "OCR: <extract all text and brands>. "
-    "DESCRIPTION: <Describe subjects and their actions or spatial relationships. "
-    "Example: '3 cows on top of a hill', 'dog riding a sled', or "
-    "'bottle of coke sitting on a table'. No colors, no styles, no flowery language.>"
 )
 DEFAULT_BUFFER_DIR = Path(__file__).parent.parent / ".buffer"
 DEFAULT_MAX_DIM = 1280

@@ -75,6 +75,11 @@ class HFVisionEngine:
         if self.model is not None:
             return
 
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "CUDA is not available. This pipeline requires a GPU."
+            )
+
         from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
         print(f"Loading {self.hf_id}...")
@@ -105,13 +110,14 @@ class HFVisionEngine:
 
     def _prepare_image(self, image_path: Path) -> Image.Image:
         """Load and resize image."""
-        img = Image.open(image_path)
-        if img.mode not in ("RGB",):
-            img = img.convert("RGB")
-        w, h = img.size
-        if max(w, h) > self.max_dim:
-            ratio = self.max_dim / max(w, h)
-            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        with Image.open(image_path) as img:
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            w, h = img.size
+            if max(w, h) > self.max_dim:
+                ratio = self.max_dim / max(w, h)
+                img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+            img.load()  # force read before file handle closes
         return img
 
     def infer(self, image_path: Path, prompt: str) -> str:

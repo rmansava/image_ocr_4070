@@ -110,6 +110,7 @@ def scan_to_db(
 
     conn = _connect()
     cur = conn.cursor()
+    cur.fast_executemany = True
 
     # Clear previous scan data for THIS root only
     cur.execute("DELETE FROM ocr_images WHERE input_root=?", (input_root,))
@@ -152,7 +153,6 @@ def scan_to_db(
                 update_count += 1
 
         if len(batch) >= 5000:
-            cur.fast_executemany = True
             cur.executemany(
                 "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
                 "VALUES(?, ?, ?, ?, ?, ?)",
@@ -164,7 +164,6 @@ def scan_to_db(
             batch = []
 
     if batch:
-        cur.fast_executemany = True
         cur.executemany(
             "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
             "VALUES(?, ?, ?, ?, ?, ?)",
@@ -193,39 +192,42 @@ def iter_unprocessed(input_root: str, pass_num: int, batch_size: int = 500):
     Each yield is a list of (image_path, archive_txt) tuples.
     """
     conn = _connect()
-    cur = conn.cursor()
-    last_path = ""
-    while True:
-        cur.execute(
-            "SELECT TOP (?) image_path, archive_txt FROM ocr_images "
-            "WHERE input_root=? AND pass_num=? AND processed=0 AND image_path > ? "
-            "ORDER BY image_path",
-            (batch_size, input_root, pass_num, last_path),
-        )
-        rows = cur.fetchall()
-        if not rows:
-            break
-        last_path = rows[-1][0]
-        yield [(Path(r[0]), Path(r[1])) for r in rows]
-    conn.close()
+    try:
+        cur = conn.cursor()
+        last_path = ""
+        while True:
+            cur.execute(
+                "SELECT TOP (?) image_path, archive_txt FROM ocr_images "
+                "WHERE input_root=? AND pass_num=? AND processed=0 AND image_path > ? "
+                "ORDER BY image_path",
+                (batch_size, input_root, pass_num, last_path),
+            )
+            rows = cur.fetchall()
+            if not rows:
+                break
+            last_path = rows[-1][0]
+            yield [(Path(r[0]), Path(r[1])) for r in rows]
+    finally:
+        conn.close()
 
 
 def mark_processed(input_root: str, image_paths: list[Path], error: str | None = None):
     """Mark images as processed in the database."""
+    if not image_paths:
+        return
     conn = _connect()
     cur = conn.cursor()
+    cur.fast_executemany = True
     if error:
-        for p in image_paths:
-            cur.execute(
-                "UPDATE ocr_images SET processed=1, error=? WHERE image_path=? AND input_root=?",
-                (error, str(p), input_root),
-            )
+        cur.executemany(
+            "UPDATE ocr_images SET processed=1, error=? WHERE image_path=? AND input_root=?",
+            [(error, str(p), input_root) for p in image_paths],
+        )
     else:
-        for p in image_paths:
-            cur.execute(
-                "UPDATE ocr_images SET processed=1 WHERE image_path=? AND input_root=?",
-                (str(p), input_root),
-            )
+        cur.executemany(
+            "UPDATE ocr_images SET processed=1 WHERE image_path=? AND input_root=?",
+            [(str(p), input_root) for p in image_paths],
+        )
     conn.commit()
     conn.close()
 
