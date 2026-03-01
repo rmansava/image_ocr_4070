@@ -6,6 +6,7 @@
   - Flush thread: writes .txt results to T:\\archive while GPU works on next batch
 """
 
+import os
 import shutil
 import sys
 import threading
@@ -167,7 +168,9 @@ def _flush_results(results: list[tuple[Path, str]], model_tag: str, batch_dir: P
         local_txt.write_text(content, encoding="utf-8")
 
         archive_txt.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(local_txt, archive_txt)
+        tmp_txt = archive_txt.with_suffix(".txt.tmp")
+        shutil.copy2(local_txt, tmp_txt)
+        os.replace(tmp_txt, archive_txt)
 
 
 # ─── Async prefetch / flush ───────────────────────────────────
