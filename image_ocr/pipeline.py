@@ -98,18 +98,25 @@ class _Counter:
 
 # ─── Local buffer ──────────────────────────────────────────────
 
-def _copy_to_buffer(batch: list[Path], buffer_dir: Path) -> list[tuple[Path, Path]]:
+def _copy_to_buffer(
+    batch: list[Path], buffer_dir: Path,
+) -> tuple[list[tuple[Path, Path]], list[tuple[Path, str]]]:
     """Copy batch images to local SSD buffer.
 
-    Returns list of (local_path, original_path) pairs.
+    Returns (pairs, copy_errors) where pairs is list of (local_path, original_path)
+    and copy_errors is list of (original_path, error_message) for unreadable files.
     """
     buffer_dir.mkdir(parents=True, exist_ok=True)
     pairs = []
+    copy_errors = []
     for i, img in enumerate(batch):
         local = buffer_dir / f"{i:06d}_{img.name}"
-        shutil.copy2(img, local)
-        pairs.append((local, img))
-    return pairs
+        try:
+            shutil.copy2(img, local)
+            pairs.append((local, img))
+        except OSError as exc:
+            copy_errors.append((img, str(exc)))
+    return pairs, copy_errors
 
 
 def _clear_buffer(buffer_dir: Path):
@@ -169,20 +176,28 @@ def _prefetch_worker(input_root, pass_num, batch_size, buffer_dir, prefetch_q):
     """Background thread: reads batches from SQL index, copies images to local SSD.
 
     Stays PREFETCH_DEPTH batches ahead of the GPU. Blocks when queue is full.
-    Sends None when no more images.
+    Sends None when no more images. Copy errors for individual files are
+    forwarded as part of the batch so the GPU thread can mark them in the DB.
     """
     batch_num = 0
     try:
         for batch in iter_unprocessed(input_root, pass_num, batch_size):
             image_paths = [img for img, _ in batch]
             batch_dir = buffer_dir / f"b{batch_num:04d}"
-            pairs = _copy_to_buffer(image_paths, batch_dir)
+            pairs, copy_errors = _copy_to_buffer(image_paths, batch_dir)
+
+            # Build lookup from original path to archive_txt
+            archive_map = {img: atxt for img, atxt in batch}
+
             enriched = [
-                (local, original, archive_txt)
-                for (local, original), (_, archive_txt) in zip(pairs, batch)
+                (local, original, archive_map[original])
+                for local, original in pairs
             ]
+            if copy_errors:
+                _log(f"  Prefetch batch {batch_num}: {len(copy_errors)} copy errors (skipped)")
+
             _log(f"  Prefetched batch {batch_num} ({len(enriched)} images) -> {batch_dir.name}")
-            prefetch_q.put((enriched, batch_dir))
+            prefetch_q.put((enriched, batch_dir, copy_errors))
             batch_num += 1
     except Exception as exc:
         _log(f"  Prefetch error: {exc}")
@@ -200,13 +215,28 @@ def _flush_worker(flush_q, input_root):
         if item is None:
             break
         results, errors, model_tag, batch_dir = item
-        _flush_results(results, model_tag, batch_dir)
-        if results:
-            mark_processed(input_root, [img for img, _ in results])
-        for img, err in errors:
-            mark_processed(input_root, [img], error=err)
-        _clear_buffer(batch_dir)
-        flush_q.task_done()
+        try:
+            _flush_results(results, model_tag, batch_dir)
+            if results:
+                mark_processed(input_root, [img for img, _ in results])
+            for img, err in errors:
+                mark_processed(input_root, [img], error=err)
+        except Exception as exc:
+            _log(f"  Flush error: {exc}")
+            # Mark all as errored so they don't block reruns
+            for img, _ in results:
+                try:
+                    mark_processed(input_root, [img], error=f"flush: {exc}")
+                except Exception:
+                    pass
+            for img, _ in errors:
+                try:
+                    mark_processed(input_root, [img], error=str(exc))
+                except Exception:
+                    pass
+        finally:
+            _clear_buffer(batch_dir)
+            flush_q.task_done()
 
 
 # ─── GPU processing ──────────────────────────────────────────────
@@ -233,10 +263,16 @@ def _run_pass(
         item = prefetch_q.get()
         if item is None:
             break
-        enriched, batch_dir = item
+        enriched, batch_dir, copy_errors = item
 
         results = []
         errors = []
+
+        # Record copy errors from prefetch
+        for img, err in copy_errors:
+            errors.append((img, f"copy: {err}"))
+            counter.tick(img.name, error=True)
+
         for local, original, _archive_txt in enriched:
             try:
                 text = engine.infer(local, prompt)
@@ -260,8 +296,8 @@ def _run_pass(
 
 def run_pipeline(
     input_path: Path,
-    model_tag: str = "qwen3-vl-8b",
-    model: str = "qwen3-vl-8b",
+    model_tag: str,
+    model: str,
     batch_size: int = 500,
     max_dim: int = DEFAULT_MAX_DIM,
     extensions: set[str] | None = None,

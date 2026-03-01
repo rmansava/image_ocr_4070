@@ -62,15 +62,11 @@ run_ocr.bat
 
 ## Available models
 
-| Name | HuggingFace ID | Family |
-|---|---|---|
-| `qwen3-vl-8b` (default) | `Qwen/Qwen3-VL-8B-Instruct` | qwen-vl |
-| `qwen3-vl-4b` | `Qwen/Qwen3-VL-4B-Instruct` | qwen-vl |
-| `qwen2.5-vl-7b` | `Qwen/Qwen2.5-VL-7B-Instruct` | qwen-vl |
-| `internvl3.5-8b` | `OpenGVLab/InternVL3_5-8B` | internvl |
-| `internvl3.5-4b` | `OpenGVLab/InternVL3_5-4B` | internvl |
-| `florence-2-large` | `microsoft/Florence-2-large` | florence |
-| `minicpm-v-2.6` | `openbmb/MiniCPM-V-2_6` | minicpm |
+| Name | HuggingFace ID |
+|---|---|
+| `qwen3-vl-8b` (default) | `Qwen/Qwen3-VL-8B-Instruct` |
+| `qwen3-vl-4b` | `Qwen/Qwen3-VL-4B-Instruct` |
+| `qwen2.5-vl-7b` | `Qwen/Qwen2.5-VL-7B-Instruct` |
 
 ## CLI options
 
@@ -78,7 +74,7 @@ run_ocr.bat
 python -m image_ocr [input] [options]
 
 positional:
-  input                 Image file or directory to process recursively
+  input                 Image file or directory to process
 
 options:
   --model MODEL         Model short name (default: qwen3-vl-8b)

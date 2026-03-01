@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-DEFAULT_MODEL = "qwen3-vl-8b"
+from .hf_engine import DEFAULT_MODEL
 DEFAULT_PROMPT = (
     "OCR: <extract all text and brands>. "
     "DESCRIPTION: <Describe subjects and their actions or spatial relationships. "
@@ -22,7 +22,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=Path,
         nargs="?",
         default=None,
-        help="Image file or directory to process recursively.",
+        help="Image file or directory to process.",
     )
 
     # Model selection

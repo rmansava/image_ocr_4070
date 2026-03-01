@@ -121,42 +121,47 @@ def scan_to_db(
     batch = []
     start = time.perf_counter()
 
-    for root, dirs, files in os.walk(input_path):
-        dirs.sort()
-        folder = Path(root)
-        images = [
-            folder / f for f in sorted(files)
-            if Path(f).suffix.lower() in exts
-        ]
+    # Support single file input
+    if input_path.is_file():
+        all_images = [input_path] if input_path.suffix.lower() in exts else []
+    else:
+        all_images = []
+        for root, dirs, files in os.walk(input_path):
+            dirs.sort()
+            folder = Path(root)
+            all_images.extend(
+                folder / f for f in sorted(files)
+                if Path(f).suffix.lower() in exts
+            )
 
-        for img in images:
-            scan_count += 1
-            archive_txt = map_to_archive(img).with_suffix(".txt")
+    for img in all_images:
+        scan_count += 1
+        archive_txt = map_to_archive(img).with_suffix(".txt")
 
-            if not archive_txt.exists():
-                batch.append((str(img), input_root, str(archive_txt), 1, False, None))
-                new_count += 1
-            else:
-                try:
-                    content = archive_txt.read_text(encoding="utf-8", errors="ignore")
-                    if f"[{model_tag}]" not in content:
-                        batch.append((str(img), input_root, str(archive_txt), 2, False, None))
-                        update_count += 1
-                except OSError:
+        if not archive_txt.exists():
+            batch.append((str(img), input_root, str(archive_txt), 1, False, None))
+            new_count += 1
+        else:
+            try:
+                content = archive_txt.read_text(encoding="utf-8", errors="ignore")
+                if f"[{model_tag}]" not in content:
                     batch.append((str(img), input_root, str(archive_txt), 2, False, None))
                     update_count += 1
+            except OSError:
+                batch.append((str(img), input_root, str(archive_txt), 2, False, None))
+                update_count += 1
 
-            if len(batch) >= 5000:
-                cur.fast_executemany = True
-                cur.executemany(
-                    "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
-                    "VALUES(?, ?, ?, ?, ?, ?)",
-                    batch,
-                )
-                conn.commit()
-                elapsed = time.perf_counter() - start
-                log_fn(f"  Scanned {scan_count:,} images ({new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]")
-                batch = []
+        if len(batch) >= 5000:
+            cur.fast_executemany = True
+            cur.executemany(
+                "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
+                "VALUES(?, ?, ?, ?, ?, ?)",
+                batch,
+            )
+            conn.commit()
+            elapsed = time.perf_counter() - start
+            log_fn(f"  Scanned {scan_count:,} images ({new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]")
+            batch = []
 
     if batch:
         cur.fast_executemany = True

@@ -2,7 +2,6 @@ Pillow>=10.0
 pyodbc>=5.0
 torch>=2.1
 transformers>=4.45
-torchvision>=0.16
 accelerate>=0.26
 qwen-vl-utils>=0.0.2
 # bitsandbytes>=0.43  # optional, for --quantize 4bit
