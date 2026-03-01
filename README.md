@@ -102,24 +102,81 @@ options:
 pip install -r requirements.txt
 ```
 
+## Architecture
+
+### Pipeline threading model
+
+```
+  Prefetch thread          GPU thread            Flush thread
+  ──────────────          ──────────            ────────────
+  SQL index query   ──>   prefetch_q  ──>       flush_q  ──>
+  Copy to SSD buffer      (bounded,5)           (bounded,5)
+                          Run inference          Write .txt to T:\archive
+                                                 Mark processed in SQL
+                                                 Clean buffer dir
+```
+
+- All three threads run concurrently. Prefetch stays up to 5 batches ahead of GPU.
+- Queues are bounded (`maxsize=5`) for backpressure — prefetch blocks when GPU falls behind.
+- Each thread propagates errors to a shared list checked by the main thread at exit.
+
+### Error handling design
+
+- **Per-file resilience**: A bad image (corrupt, unreadable, inference failure) is logged and skipped. It does not halt the batch or the pipeline.
+- **Prefetch fatal errors** (DB down, network failure): Logged, propagated to main thread via `prefetch_errors` list, pipeline exits non-zero.
+- **Flush errors**: Caught per-batch, images marked as errored in SQL so they don't block reruns. Propagated to main thread via `flush_errors` list.
+- **Atomic writes**: Archive `.txt` files are written to `.txt.tmp` first, then `os.replace()` to the final path. No partial writes on crash.
+- **Crash-safe rescan**: `scan_time` metadata is cleared before DELETE and only set after the full scan succeeds. An interrupted `--rescan` always re-triggers on the next run.
+
+### Concurrency assumptions
+
+- **Single process per category**. No file locking on archive `.txt` writes. Running two processes on the same input root simultaneously will race on read-modify-write of `.txt` files.
+- Different categories (albums, comics, etc.) can run concurrently — they use separate SQL rows and write to different archive paths.
+
+### Skip / resume logic
+
+The `[model-tag]` block inside each `.txt` file is the source of truth for what's been processed:
+
+1. **Scan phase**: For each image, check if `T:\archive\...\image.txt` exists and contains `[model-tag]`. If yes, skip. If no txt exists → pass 1 (new). If txt exists but tag missing → pass 2 (update).
+2. **Processing phase**: After inference, the flush thread reads the archive `.txt` again before writing (in case another run completed it). If `[model-tag]` is already present, skip the write.
+3. **SQL index**: `processed` flag tracks what's been done in the current run. Re-running with the same model tag and input path reuses the index (no re-walk). Changing model tag or using `--rescan` rebuilds the index.
+
+### Key constants
+
+| Constant | Location | Value | Notes |
+|---|---|---|---|
+| `DEFAULT_MODEL` | `hf_engine.py` | `qwen3-vl-8b` | Single source of truth, imported by `cli.py` |
+| `DEFAULT_PROMPT` | `cli.py` | OCR + description prompt | Single source of truth, imported by `pipeline.py` |
+| `DEFAULT_MAX_DIM` | `hf_engine.py` | `1280` | Max image dimension before resize |
+| `PREFETCH_DEPTH` | `pipeline.py` | `5` | Batches buffered ahead of GPU |
+| `CONN_STR` | `scan_db.py` | `RMDESK/Trivia` | Windows auth, ODBC 17 |
+| `SOURCE_PREFIX` | `scanner.py` | `T:\archiverelated` | Source root for path mapping |
+| `DEST_PREFIX` | `scanner.py` | `T:\archive` | Destination root for path mapping |
+
 ## Project structure
 
 ```
 image_ocr/
   __main__.py       # python -m image_ocr entry point
-  cli.py            # Argument parsing and main()
+  cli.py            # Argument parsing, DEFAULT_PROMPT, main()
   pipeline.py       # 3-thread prefetch/GPU/flush pipeline
-  hf_engine.py      # Vision model loading and inference (SDPA)
-  scan_db.py        # MS SQL image index (pyodbc)
-  scanner.py        # Path mapping (archiverelated -> archive)
+  hf_engine.py      # Vision model loading and inference (SDPA), DEFAULT_MODEL
+  scan_db.py        # MS SQL image index (pyodbc), connection string
+  scanner.py        # Path mapping (archiverelated -> archive), exceptions dict
   text_formatter.py # Tagged text block formatting
+run_ocr.bat         # Auto-restart launcher
+requirements.txt    # Pillow, pyodbc, torch, transformers, accelerate, qwen-vl-utils
 ```
 
 ## Database
 
 Two tables in `RMDESK.Trivia`:
 
-- **`ocr_images`** — One row per image, keyed by `(image_path, input_root)`. Tracks `pass_num` (1=new, 2=update), `processed` flag, and errors.
-- **`ocr_scan_meta`** — Key-value metadata per input root (model tag, scan time, etc.).
+- **`ocr_images`** — One row per image, keyed by `(image_path, input_root)`. Tracks `pass_num` (1=new, 2=update), `processed` flag, and errors. Indexed on `(input_root, pass_num, processed)` for keyset pagination.
+- **`ocr_scan_meta`** — Key-value metadata per input root (model tag, scan time, total scanned, input path). `scan_time` being empty signals an incomplete scan.
 
-Multiple input roots (albums, comics, print ads) coexist in the same tables.
+Multiple input roots (albums, comics, print ads) coexist in the same tables. Each `scan_to_db` call only DELETEs/INSERTs rows for its own `input_root`.
+
+## Other repo
+
+The Strix Halo version (Ollama backend) lives at [github.com/rmansava/image_ocr](https://github.com/rmansava/image_ocr). This repo is the RTX 4070 Ti SUPER version using HuggingFace transformers + SDPA. Do not cross-push.
