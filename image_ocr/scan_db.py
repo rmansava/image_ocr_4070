@@ -389,11 +389,15 @@ def scan_to_db(
                 new_count += 1
             else:
                 update_count += 1
-        if scan_count - last_log >= 1000:
-            elapsed = time.perf_counter() - start
+        elapsed = time.perf_counter() - start
+        _status(
+            f"  Phase 3: {scan_count:,} scanned, "
+            f"{new_count:,} new, {update_count:,} update [{elapsed:.0f}s]"
+        )
+        if scan_count - last_log >= 50000:
             log_fn(
-                f"  Scanned {scan_count:,} ({skip_count:,} existing, "
-                f"{new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]"
+                f"  Phase 3: {scan_count:,} scanned "
+                f"({new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]"
             )
             last_log = scan_count
         if len(batch) >= 5000:
