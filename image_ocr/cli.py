@@ -64,7 +64,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--buffer-dir",
         type=Path,
         default=None,
-        help="Local SSD directory for rolling image buffer (default: .buffer/ in project).",
+        help=r"Local SSD directory for rolling image buffer (default: C:\ocrbuffer\<category>).",
     )
     parser.add_argument(
         "--batch-size",

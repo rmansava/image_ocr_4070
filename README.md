@@ -83,7 +83,7 @@ options:
   --dtype {bf16,fp16,fp32}  Torch dtype (default: bf16)
   --quantize {4bit}     Quantization (requires bitsandbytes)
   --no-compile          Disable torch.compile
-  --buffer-dir PATH     Local SSD directory for rolling image buffer
+  --buffer-dir PATH     Local SSD directory for rolling image buffer (default: C:\ocrbuffer\<category>)
   --batch-size N        Images per batch (default: 50)
   --max-dim N           Max image dimension (default: 1280)
   --ext EXT [EXT ...]   Image extensions to include (e.g. --ext jpg png)
@@ -116,8 +116,8 @@ pip install -r requirements.txt
                                                  Clean buffer dir
 ```
 
-- All three threads run concurrently. Prefetch stays up to 5 batches ahead of GPU.
-- Queues are bounded (`maxsize=5`) for backpressure — prefetch blocks when GPU falls behind.
+- All three threads run concurrently. Prefetch stays up to 20 batches (1,000 images) ahead of GPU.
+- Queues are bounded (`maxsize=20`) for backpressure — prefetch blocks when GPU falls behind.
 - Each thread propagates errors to a shared list checked by the main thread at exit.
 
 ### Error handling design
@@ -151,7 +151,7 @@ The `[model-tag]` block inside each `.txt` file is the source of truth for what'
 | `DEFAULT_MODEL` | `hf_engine.py` | `qwen3-vl-8b` | Single source of truth, imported by `cli.py` |
 | `DEFAULT_PROMPT` | `cli.py` | OCR + description prompt | Single source of truth, imported by `pipeline.py` |
 | `DEFAULT_MAX_DIM` | `hf_engine.py` | `1280` | Max image dimension before resize |
-| `PREFETCH_DEPTH` | `pipeline.py` | `5` | Batches buffered ahead of GPU |
+| `PREFETCH_DEPTH` | `pipeline.py` | `20` | Batches buffered ahead of GPU |
 | `MAX_CONSECUTIVE_ERRORS` | `pipeline.py` | `10` | Circuit breaker threshold |
 | `CONN_STR` | `scan_db.py` | `RMDESK/Trivia` | Windows auth, ODBC 17 |
 | `SOURCE_PREFIX` | `scanner.py` | `T:\archiverelated` | Source root for path mapping |

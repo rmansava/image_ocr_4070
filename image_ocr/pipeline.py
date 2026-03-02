@@ -19,9 +19,9 @@ from .scan_db import (
     init_db, scan_to_db, iter_unprocessed, mark_processed,
     get_stats, get_scan_meta, _input_root_key,
 )
-DEFAULT_BUFFER_DIR = Path(__file__).parent.parent / ".buffer"
+DEFAULT_BUFFER_BASE = Path(r"C:\ocrbuffer")
 DEFAULT_MAX_DIM = 1280
-PREFETCH_DEPTH = 5  # batches to keep buffered ahead of GPU
+PREFETCH_DEPTH = 20  # batches to keep buffered ahead of GPU
 MAX_CONSECUTIVE_ERRORS = 10  # circuit breaker: stop pass after N in a row
 
 
@@ -345,7 +345,7 @@ def run_pipeline(
     rescan: bool = False,
 ) -> list[tuple[Path, str]]:
     if buffer_dir is None:
-        buffer_dir = DEFAULT_BUFFER_DIR
+        buffer_dir = DEFAULT_BUFFER_BASE / input_path.name
     buffer_dir.mkdir(parents=True, exist_ok=True)
 
     # Clean leftover buffer dirs from previous crash
