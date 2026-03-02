@@ -194,7 +194,7 @@ def _scan_via_api(
         adir = map_to_archive(folder)
         dir_work.append((folder, sorted(names), adir))
 
-    log_fn(f"  Phase 3: classifying images ({SCAN_THREADS} threads)...")
+    log_fn(f"  Phase 3: classifying {walk_images:,} images across {len(dir_work):,} dirs ({SCAN_THREADS} threads)...")
     with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
         futures = {
             pool.submit(
@@ -267,7 +267,7 @@ def _scan_via_walk(
     )
 
     # Phase 3: classify in parallel (tag reads only — existence is in-memory)
-    log_fn(f"  Phase 3: classifying images ({SCAN_THREADS} threads)...")
+    log_fn(f"  Phase 3: classifying {walk_images:,} images across {len(dir_work):,} dirs ({SCAN_THREADS} threads)...")
     with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
         futures = {
             pool.submit(
