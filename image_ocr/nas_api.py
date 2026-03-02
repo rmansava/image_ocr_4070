@@ -222,12 +222,13 @@ def search_files(
     all_paths = []
 
     for i, ext in enumerate(extensions):
+        log_fn(f"  Searching .{ext} ({i + 1}/{len(extensions)})...")
         unc_paths = _search_one(nas, api_folder, ext, use_extension_param, log_fn, label)
         all_paths.extend(unc_paths)
         elapsed = time.perf_counter() - start
         log_fn(
-            f"  NAS search: {len(all_paths):,} {label} "
-            f"({i + 1}/{len(extensions)} extensions done) [{elapsed:.0f}s]"
+            f"  .{ext}: {len(unc_paths):,} found — "
+            f"total {len(all_paths):,} {label} [{elapsed:.0f}s]"
         )
 
     if owns_connection:
