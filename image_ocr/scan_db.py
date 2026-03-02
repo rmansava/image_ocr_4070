@@ -39,20 +39,52 @@ def _input_root_key(input_path: Path) -> str:
 
 
 def init_db():
-    """Create tables and indexes if they don't exist."""
+    """Create tables and indexes if they don't exist.
+
+    Uses an identity PK with a non-clustered unique index on image_path
+    to avoid the 900-byte clustered index limit (long NAS paths).
+    """
     conn = _connect()
     cur = conn.cursor()
+
+    # Migrate: drop old table if it has the old composite PK schema
+    cur.execute("""
+        IF EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE name = 'PK_ocr_images' AND object_id = OBJECT_ID('ocr_images')
+              AND EXISTS (
+                SELECT 1 FROM sys.index_columns ic
+                JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+                WHERE ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = 'PK_ocr_images' AND object_id = OBJECT_ID('ocr_images'))
+                  AND ic.object_id = OBJECT_ID('ocr_images')
+                  AND c.name = 'input_root'
+            )
+        )
+        BEGIN
+            DROP TABLE ocr_images
+            -- Clear scan metadata so all roots get rescanned
+            IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ocr_scan_meta')
+                DELETE FROM ocr_scan_meta
+        END
+    """)
+
     cur.execute("""
         IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'ocr_images')
         CREATE TABLE ocr_images (
-            image_path   NVARCHAR(450) NOT NULL,
-            input_root   NVARCHAR(450) NOT NULL,
-            archive_txt  NVARCHAR(900) NOT NULL,
+            id           INT IDENTITY(1,1) NOT NULL,
+            image_path   NVARCHAR(800) NOT NULL,
+            input_root   NVARCHAR(200) NOT NULL,
+            archive_txt  NVARCHAR(MAX) NOT NULL,
             pass_num     INT NOT NULL,
             processed    BIT DEFAULT 0,
             error        NVARCHAR(MAX),
-            CONSTRAINT PK_ocr_images PRIMARY KEY (image_path, input_root)
+            CONSTRAINT PK_ocr_images PRIMARY KEY CLUSTERED (id)
         )
+    """)
+    cur.execute("""
+        IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'UQ_ocr_image_path')
+        CREATE UNIQUE NONCLUSTERED INDEX UQ_ocr_image_path
+            ON ocr_images(image_path)
     """)
     cur.execute("""
         IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_ocr_root_pass_proc')
