@@ -91,25 +91,39 @@ def set_scan_meta(input_root: str, key: str, value: str):
     conn.close()
 
 
+SCAN_THREADS = 8  # parallel workers for NAS I/O during scan
+
+
 def scan_to_db(
     input_path: Path,
     model_tag: str,
     extensions: set[str] | None = None,
     log_fn=None,
+    force_full: bool = False,
 ) -> tuple[int, int]:
     """Walk the input directory and populate the SQL index.
 
     Only touches rows for this input_root — other roots are untouched.
+    If force_full is True (--rescan or model tag changed), deletes all rows
+    and re-scans from scratch. Otherwise, resumes incrementally — images
+    already in the index are skipped.
+
+    Archive checking is parallelized: instead of one stat() per image, we
+    list each archive directory once (one NAS call per directory) and check
+    8 directories in parallel via a thread pool.
+
     Returns (new_count, update_count).
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     if log_fn is None:
         log_fn = print
 
     exts = extensions or IMAGE_EXTENSIONS
     input_root = _input_root_key(input_path)
 
-    # Clear scan_time BEFORE deleting rows. If we crash mid-scan, the next
-    # run will see no scan_time and re-trigger a full rescan.
+    # Clear scan_time BEFORE any changes. If we crash mid-scan, the next
+    # run will see no scan_time and resume the incremental scan.
     set_scan_meta(input_root, "scan_time", "")
     set_scan_meta(input_root, "model_tag", model_tag)
 
@@ -117,72 +131,169 @@ def scan_to_db(
     cur = conn.cursor()
     cur.fast_executemany = True
 
-    # Clear previous scan data for THIS root only
-    cur.execute("DELETE FROM ocr_images WHERE input_root=?", (input_root,))
-    conn.commit()
+    existing_paths = set()
+    if force_full:
+        cur.execute("DELETE FROM ocr_images WHERE input_root=?", (input_root,))
+        conn.commit()
+        log_fn(f"  Full rescan — cleared previous index")
+    else:
+        # Incremental: load already-indexed paths so we can skip them
+        cur.execute("SELECT image_path FROM ocr_images WHERE input_root=?", (input_root,))
+        existing_paths = {row[0] for row in cur.fetchall()}
+        if existing_paths:
+            log_fn(f"  Resuming scan ({len(existing_paths):,} images already indexed)")
 
     new_count = 0
     update_count = 0
     scan_count = 0
+    skip_count = len(existing_paths)
     batch = []
     start = time.perf_counter()
+    last_log = 0
 
-    def _iter_images():
-        """Yield image paths one at a time — no full list in memory."""
-        if input_path.is_file():
-            if input_path.suffix.lower() in exts:
-                yield input_path
+    def _classify_dir(folder, image_names, archive_dir, archive_stems):
+        """Classify images in one source directory against the archive.
+
+        archive_stems is a pre-built dict of {stem_lower: Path} for .txt files
+        in the archive directory (built from the Phase 2 walk — no NAS I/O here
+        for existence checks). Only reads .txt content for tag checking.
+
+        Returns (classified, dir_total) where classified is a list of
+        (img_str, archive_txt_str, pass_num) tuples.
+        """
+        classified = []
+        for f in image_names:
+            img = folder / f
+            img_str = str(img)
+            if img_str in existing_paths:
+                continue
+            stem = Path(f).stem
+            archive_txt = archive_dir / f"{stem}.txt"
+            stem_lower = stem.lower()
+            if stem_lower not in archive_stems:
+                classified.append((img_str, str(archive_txt), 1))
+            else:
+                txt_path = archive_stems[stem_lower]
+                try:
+                    content = txt_path.read_text(encoding="utf-8", errors="ignore")
+                    if f"[{model_tag}]" not in content:
+                        classified.append((img_str, str(archive_txt), 2))
+                except OSError:
+                    classified.append((img_str, str(archive_txt), 2))
+        return classified, len(image_names)
+
+    def _flush_batch():
+        nonlocal batch
+        if not batch:
             return
-        for root, dirs, files in os.walk(input_path):
-            dirs.sort()
-            folder = Path(root)
-            for f in sorted(files):
-                if Path(f).suffix.lower() in exts:
-                    yield folder / f
-
-    for img in _iter_images():
-        scan_count += 1
-        archive_txt = map_to_archive(img).with_suffix(".txt")
-
-        if not archive_txt.exists():
-            batch.append((str(img), input_root, str(archive_txt), 1, False, None))
-            new_count += 1
-        else:
-            try:
-                content = archive_txt.read_text(encoding="utf-8", errors="ignore")
-                if f"[{model_tag}]" not in content:
-                    batch.append((str(img), input_root, str(archive_txt), 2, False, None))
-                    update_count += 1
-            except OSError:
-                batch.append((str(img), input_root, str(archive_txt), 2, False, None))
-                update_count += 1
-
-        if len(batch) >= 5000:
-            cur.executemany(
-                "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
-                "VALUES(?, ?, ?, ?, ?, ?)",
-                batch,
-            )
-            conn.commit()
-            elapsed = time.perf_counter() - start
-            log_fn(f"  Scanned {scan_count:,} images ({new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]")
-            batch = []
-
-    if batch:
         cur.executemany(
             "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
             "VALUES(?, ?, ?, ?, ?, ?)",
             batch,
         )
         conn.commit()
+        batch = []
+
+    def _collect(classified, dir_total):
+        """Collect results from one directory into counters and batch."""
+        nonlocal scan_count, new_count, update_count, last_log
+        scan_count += dir_total
+        for img_str, archive_txt_str, pass_num in classified:
+            batch.append((img_str, input_root, archive_txt_str, pass_num, False, None))
+            if pass_num == 1:
+                new_count += 1
+            else:
+                update_count += 1
+        if scan_count - last_log >= 1000:
+            elapsed = time.perf_counter() - start
+            log_fn(
+                f"  Scanned {scan_count:,} ({skip_count:,} existing, "
+                f"{new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]"
+            )
+            last_log = scan_count
+        if len(batch) >= 5000:
+            _flush_batch()
+
+    if input_path.is_file():
+        # Single file — no threading needed
+        archive_dir = map_to_archive(input_path.parent)
+        archive_stems = {}
+        try:
+            if archive_dir.is_dir():
+                for p in archive_dir.iterdir():
+                    if p.suffix.lower() == ".txt":
+                        archive_stems[p.stem.lower()] = p
+        except OSError:
+            pass
+        if input_path.suffix.lower() in exts:
+            classified, dt = _classify_dir(
+                input_path.parent, [input_path.name], archive_dir, archive_stems,
+            )
+            _collect(classified, dt)
+    else:
+        # Phase 1: walk source directories (just directory listings)
+        dir_work = []
+        for root, dirs, files in os.walk(input_path):
+            dirs.sort()
+            folder = Path(root)
+            image_names = sorted(f for f in files if Path(f).suffix.lower() in exts)
+            if not image_names:
+                continue
+            dir_work.append((folder, image_names, map_to_archive(folder)))
+
+        total_images = sum(len(imgs) for _, imgs, _ in dir_work)
+        elapsed = time.perf_counter() - start
+        log_fn(
+            f"  Found {total_images:,} images in {len(dir_work):,} directories [{elapsed:.0f}s]"
+        )
+
+        # Phase 2: walk archive to index existing .txt files
+        archive_root = map_to_archive(input_path)
+        archive_index = {}  # str(archive_dir) -> {stem_lower: Path}
+        txt_count = 0
+        if archive_root.is_dir():
+            for root, dirs, files in os.walk(archive_root):
+                dirs.sort()
+                folder = Path(root)
+                txt_files = {}
+                for f in files:
+                    if Path(f).suffix.lower() == ".txt":
+                        txt_files[Path(f).stem.lower()] = folder / f
+                if txt_files:
+                    archive_index[str(folder)] = txt_files
+                    txt_count += len(txt_files)
+
+        elapsed = time.perf_counter() - start
+        log_fn(
+            f"  Found {txt_count:,} archive .txt files in "
+            f"{len(archive_index):,} directories [{elapsed:.0f}s]"
+        )
+
+        # Phase 3: classify in parallel (tag reads only — existence is in-memory)
+        with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
+            futures = {
+                pool.submit(
+                    _classify_dir, folder, names, adir,
+                    archive_index.get(str(adir), {}),
+                ): None
+                for folder, names, adir in dir_work
+            }
+            for future in as_completed(futures):
+                classified, dir_total = future.result()
+                _collect(classified, dir_total)
+
+    _flush_batch()
 
     elapsed = time.perf_counter() - start
-    log_fn(f"  Scan complete: {scan_count:,} images ({new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]")
+    log_fn(
+        f"  Scan complete: {scan_count:,} images ({skip_count:,} existing, "
+        f"{new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]"
+    )
 
     conn.close()
 
     # Set scan_time LAST — this marks the scan as complete. If we crashed
-    # before this point, scan_time is empty and the next run re-scans.
+    # before this point, scan_time is empty and the next run resumes incrementally.
     set_scan_meta(input_root, "input_path", str(input_path))
     set_scan_meta(input_root, "total_scanned", str(scan_count))
     set_scan_meta(input_root, "scan_time", str(time.time()))

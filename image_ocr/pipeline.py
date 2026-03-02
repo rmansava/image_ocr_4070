@@ -367,8 +367,9 @@ def run_pipeline(
     )
 
     if needs_scan:
-        _log(f"Scanning {input_path} for images...")
-        scan_to_db(input_path, model_tag, extensions, _log)
+        force_full = rescan or prev_tag != model_tag
+        _log(f"Scanning {input_path} for images{' (full rescan)' if force_full else ''}...")
+        scan_to_db(input_path, model_tag, extensions, _log, force_full=force_full)
     else:
         stats = get_stats(input_root)
         _log(f"Using existing scan index ({stats[1]['remaining']:,} new, {stats[2]['remaining']:,} updates remaining)")
