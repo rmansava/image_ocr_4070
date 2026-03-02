@@ -6,12 +6,20 @@ coexist in the same table.
 """
 
 import os
+import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import pyodbc
 
 from .scanner import IMAGE_EXTENSIONS, map_to_archive
+
+
+def _status(msg: str):
+    """Overwrite current line (no newline) for live progress."""
+    sys.stdout.write(f"\r\033[K{msg}")
+    sys.stdout.flush()
 
 CONN_STR = (
     "Driver={ODBC Driver 17 for SQL Server};"
@@ -94,6 +102,142 @@ def set_scan_meta(input_root: str, key: str, value: str):
 SCAN_THREADS = 8  # parallel workers for NAS I/O during scan
 
 
+def _scan_via_api(
+    input_path, exts, existing_paths, model_tag,
+    _classify_dir, _collect, _flush_batch, log_fn, start,
+):
+    """Phase 1+2+3 using Synology FileStation API (fast NAS-side search)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from .nas_api import search_files
+
+    # Phase 1: search NAS for images
+    log_fn(f"  Phase 1: searching NAS for images (via API)...")
+    ext_list = [e.lstrip(".") for e in exts]
+    image_paths = search_files(input_path, ext_list, log_fn, label="images")
+
+    # Group by directory
+    dir_images = defaultdict(list)
+    for unc_path in image_paths:
+        p = Path(unc_path)
+        dir_images[p.parent].append(p.name)
+
+    walk_images = len(image_paths)
+    elapsed = time.perf_counter() - start
+    log_fn(
+        f"  Phase 1: {walk_images:,} images in "
+        f"{len(dir_images):,} directories [{elapsed:.0f}s]"
+    )
+
+    # Phase 2: search NAS for archive .txt files
+    archive_root = map_to_archive(input_path)
+    log_fn(f"  Phase 2: searching NAS for archive .txt files (via API)...")
+    txt_paths = search_files(archive_root, ["txt"], log_fn, label=".txt files")
+
+    # Build archive index: {str(archive_dir): {stem_lower: Path}}
+    archive_index = defaultdict(dict)
+    for unc_path in txt_paths:
+        p = Path(unc_path)
+        archive_index[str(p.parent)][p.stem.lower()] = p
+
+    elapsed = time.perf_counter() - start
+    log_fn(
+        f"  Phase 2: {len(txt_paths):,} archive .txt files in "
+        f"{len(archive_index):,} directories [{elapsed:.0f}s]"
+    )
+
+    # Phase 3: classify in parallel (tag reads only — existence is in-memory)
+    dir_work = []
+    for folder, names in dir_images.items():
+        adir = map_to_archive(folder)
+        dir_work.append((folder, sorted(names), adir))
+
+    log_fn(f"  Phase 3: classifying images ({SCAN_THREADS} threads)...")
+    with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
+        futures = {
+            pool.submit(
+                _classify_dir, folder, names, adir,
+                archive_index.get(str(adir), {}),
+            ): None
+            for folder, names, adir in dir_work
+        }
+        for future in as_completed(futures):
+            classified, dir_total = future.result()
+            _collect(classified, dir_total)
+
+
+def _scan_via_walk(
+    input_path, exts, existing_paths, model_tag,
+    _classify_dir, _collect, _flush_batch, log_fn, start,
+):
+    """Phase 1+2+3 using os.walk (fallback for local paths)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    # Phase 1: walk source directories (just directory listings)
+    log_fn(f"  Phase 1: walking source directories...")
+    dir_work = []
+    walk_images = 0
+    walk_last_log = 0
+    for root, dirs, files in os.walk(input_path):
+        dirs.sort()
+        folder = Path(root)
+        image_names = sorted(f for f in files if Path(f).suffix.lower() in exts)
+        if not image_names:
+            continue
+        dir_work.append((folder, image_names, map_to_archive(folder)))
+        walk_images += len(image_names)
+        if walk_images - walk_last_log >= 10000:
+            _status(f"  Phase 1: walking source... {walk_images:,} images, {len(dir_work):,} dirs")
+            walk_last_log = walk_images
+
+    elapsed = time.perf_counter() - start
+    log_fn(
+        f"  Phase 1: {walk_images:,} images in {len(dir_work):,} directories [{elapsed:.0f}s]"
+    )
+
+    # Phase 2: walk archive to index existing .txt files
+    log_fn(f"  Phase 2: walking archive directories...")
+    archive_root = map_to_archive(input_path)
+    archive_index = {}  # str(archive_dir) -> {stem_lower: Path}
+    txt_count = 0
+    archive_dirs = 0
+    if archive_root.is_dir():
+        walk_last_log = 0
+        for root, dirs, files in os.walk(archive_root):
+            dirs.sort()
+            folder = Path(root)
+            txt_files = {}
+            for f in files:
+                if Path(f).suffix.lower() == ".txt":
+                    txt_files[Path(f).stem.lower()] = folder / f
+            if txt_files:
+                archive_index[str(folder)] = txt_files
+                txt_count += len(txt_files)
+            archive_dirs += 1
+            if txt_count - walk_last_log >= 10000:
+                _status(f"  Phase 2: walking archive... {txt_count:,} .txt files, {archive_dirs:,} dirs")
+                walk_last_log = txt_count
+
+    elapsed = time.perf_counter() - start
+    log_fn(
+        f"  Phase 2: {txt_count:,} archive .txt files in "
+        f"{len(archive_index):,} directories [{elapsed:.0f}s]"
+    )
+
+    # Phase 3: classify in parallel (tag reads only — existence is in-memory)
+    log_fn(f"  Phase 3: classifying images ({SCAN_THREADS} threads)...")
+    with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
+        futures = {
+            pool.submit(
+                _classify_dir, folder, names, adir,
+                archive_index.get(str(adir), {}),
+            ): None
+            for folder, names, adir in dir_work
+        }
+        for future in as_completed(futures):
+            classified, dir_total = future.result()
+            _collect(classified, dir_total)
+
+
 def scan_to_db(
     input_path: Path,
     model_tag: str,
@@ -114,8 +258,6 @@ def scan_to_db(
 
     Returns (new_count, update_count).
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
     if log_fn is None:
         log_fn = print
 
@@ -231,56 +373,24 @@ def scan_to_db(
             )
             _collect(classified, dt)
     else:
-        # Phase 1: walk source directories (just directory listings)
-        dir_work = []
-        for root, dirs, files in os.walk(input_path):
-            dirs.sort()
-            folder = Path(root)
-            image_names = sorted(f for f in files if Path(f).suffix.lower() in exts)
-            if not image_names:
-                continue
-            dir_work.append((folder, image_names, map_to_archive(folder)))
-
-        total_images = sum(len(imgs) for _, imgs, _ in dir_work)
-        elapsed = time.perf_counter() - start
-        log_fn(
-            f"  Found {total_images:,} images in {len(dir_work):,} directories [{elapsed:.0f}s]"
+        # Detect whether this is a NAS path (UNC or T: drive)
+        input_str = str(input_path)
+        is_nas = (
+            input_str.startswith("\\\\")
+            or input_str.lower().startswith("t:\\")
+            or input_str.lower().startswith("t:/")
         )
 
-        # Phase 2: walk archive to index existing .txt files
-        archive_root = map_to_archive(input_path)
-        archive_index = {}  # str(archive_dir) -> {stem_lower: Path}
-        txt_count = 0
-        if archive_root.is_dir():
-            for root, dirs, files in os.walk(archive_root):
-                dirs.sort()
-                folder = Path(root)
-                txt_files = {}
-                for f in files:
-                    if Path(f).suffix.lower() == ".txt":
-                        txt_files[Path(f).stem.lower()] = folder / f
-                if txt_files:
-                    archive_index[str(folder)] = txt_files
-                    txt_count += len(txt_files)
-
-        elapsed = time.perf_counter() - start
-        log_fn(
-            f"  Found {txt_count:,} archive .txt files in "
-            f"{len(archive_index):,} directories [{elapsed:.0f}s]"
-        )
-
-        # Phase 3: classify in parallel (tag reads only — existence is in-memory)
-        with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
-            futures = {
-                pool.submit(
-                    _classify_dir, folder, names, adir,
-                    archive_index.get(str(adir), {}),
-                ): None
-                for folder, names, adir in dir_work
-            }
-            for future in as_completed(futures):
-                classified, dir_total = future.result()
-                _collect(classified, dir_total)
+        if is_nas:
+            _scan_via_api(
+                input_path, exts, existing_paths, model_tag,
+                _classify_dir, _collect, _flush_batch, log_fn, start,
+            )
+        else:
+            _scan_via_walk(
+                input_path, exts, existing_paths, model_tag,
+                _classify_dir, _collect, _flush_batch, log_fn, start,
+            )
 
     _flush_batch()
 
