@@ -140,12 +140,15 @@ def _scan_via_api(
 ):
     """Phase 1+2+3 using Synology FileStation API (fast NAS-side search)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from .nas_api import search_files
+    from .nas_api import search_files, _connect as nas_connect
+
+    # Reuse a single NAS session for all searches
+    nas = nas_connect()
 
     # Phase 1: search NAS for images
     log_fn(f"  Phase 1: searching NAS for images (via API)...")
     ext_list = [e.lstrip(".") for e in exts]
-    image_paths = search_files(input_path, ext_list, log_fn, label="images")
+    image_paths = search_files(input_path, ext_list, log_fn, label="images", nas=nas)
 
     # Group by directory
     dir_images = defaultdict(list)
@@ -161,9 +164,17 @@ def _scan_via_api(
     )
 
     # Phase 2: search NAS for archive .txt files
+    # NOTE: must use extension param, not pattern — Synology API quirk where
+    # pattern="*.txt" + recursive=True silently returns 0 results.
     archive_root = map_to_archive(input_path)
     log_fn(f"  Phase 2: searching NAS for archive .txt files (via API)...")
-    txt_paths = search_files(archive_root, ["txt"], log_fn, label=".txt files")
+    txt_paths = search_files(
+        archive_root, ["txt"], log_fn, label=".txt files",
+        use_extension_param=True, nas=nas,
+    )
+
+    # Done with NAS API — logout to free the session
+    nas.logout()
 
     # Build archive index: {str(archive_dir): {stem_lower: Path}}
     archive_index = defaultdict(dict)
