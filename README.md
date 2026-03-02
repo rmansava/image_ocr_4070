@@ -84,7 +84,7 @@ options:
   --quantize {4bit}     Quantization (requires bitsandbytes)
   --no-compile          Disable torch.compile
   --buffer-dir PATH     Local SSD directory for rolling image buffer
-  --batch-size N        Images per batch (default: 500)
+  --batch-size N        Images per batch (default: 50)
   --max-dim N           Max image dimension (default: 1280)
   --ext EXT [EXT ...]   Image extensions to include (e.g. --ext jpg png)
   --rescan              Force a fresh scan of the input directory
@@ -123,8 +123,11 @@ pip install -r requirements.txt
 ### Error handling design
 
 - **Per-file resilience**: A bad image (corrupt, unreadable, inference failure) is logged and skipped. It does not halt the batch or the pipeline.
+- **Circuit breaker**: 10 consecutive inference errors abort the current pass immediately. Prevents OOM cascades from silently marking millions of images as permanently errored.
+- **Transient vs permanent errors**: Copy errors (NAS I/O) and flush I/O errors are transient — images are NOT marked processed and will be retried next run. Inference errors (corrupt image, model failure) are permanent — marked processed with error string.
+- **VRAM check**: After model load, warns if <2 GB VRAM free and suggests `--quantize 4bit` or `--model qwen3-vl-4b`.
 - **Prefetch fatal errors** (DB down, network failure): Logged, propagated to main thread via `prefetch_errors` list, pipeline exits non-zero.
-- **Flush errors**: Caught per-batch, images marked as errored in SQL so they don't block reruns. Propagated to main thread via `flush_errors` list.
+- **Flush errors**: Caught per-batch. I/O errors are transient (retry next run). Other errors mark images as permanently errored.
 - **Atomic writes**: Archive `.txt` files are written to `.txt.tmp` first, then `os.replace()` to the final path. No partial writes on crash.
 - **Crash-safe rescan**: `scan_time` metadata is cleared before DELETE and only set after the full scan succeeds. An interrupted `--rescan` always re-triggers on the next run.
 
@@ -149,6 +152,7 @@ The `[model-tag]` block inside each `.txt` file is the source of truth for what'
 | `DEFAULT_PROMPT` | `cli.py` | OCR + description prompt | Single source of truth, imported by `pipeline.py` |
 | `DEFAULT_MAX_DIM` | `hf_engine.py` | `1280` | Max image dimension before resize |
 | `PREFETCH_DEPTH` | `pipeline.py` | `5` | Batches buffered ahead of GPU |
+| `MAX_CONSECUTIVE_ERRORS` | `pipeline.py` | `10` | Circuit breaker threshold |
 | `CONN_STR` | `scan_db.py` | `RMDESK/Trivia` | Windows auth, ODBC 17 |
 | `SOURCE_PREFIX` | `scanner.py` | `T:\archiverelated` | Source root for path mapping |
 | `DEST_PREFIX` | `scanner.py` | `T:\archive` | Destination root for path mapping |

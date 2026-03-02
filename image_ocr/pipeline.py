@@ -22,6 +22,7 @@ from .scan_db import (
 DEFAULT_BUFFER_DIR = Path(__file__).parent.parent / ".buffer"
 DEFAULT_MAX_DIM = 1280
 PREFETCH_DEPTH = 5  # batches to keep buffered ahead of GPU
+MAX_CONSECUTIVE_ERRORS = 10  # circuit breaker: stop pass after N in a row
 
 
 def _status(msg: str):
@@ -209,30 +210,36 @@ def _flush_worker(flush_q, input_root, flush_errors):
 
     Marks images as processed in SQL. Runs while GPU works on next batch.
     Appends (path, error_msg) to flush_errors list so main thread can report them.
+
+    Error handling:
+    - inference_errors are permanent → marked processed with error string.
+    - OSError during flush is transient → NOT marked, will retry next run.
+    - Other flush errors are permanent → marked as errored.
     """
     while True:
         item = flush_q.get()
         if item is None:
             break
-        results, errors, model_tag, batch_dir = item
+        results, inference_errors, model_tag, batch_dir = item
         try:
             _flush_results(results, model_tag, batch_dir)
             if results:
                 mark_processed(input_root, [img for img, _ in results])
-            for img, err in errors:
-                mark_processed(input_root, [img], error=err)
+            # Inference errors are permanent — mark so they're not retried
+            if inference_errors:
+                for img, err in inference_errors:
+                    mark_processed(input_root, [img], error=err)
+        except OSError as exc:
+            # Transient I/O error — don't mark anything, will retry next run
+            _log(f"  Flush I/O error (transient, will retry): {exc}")
+            for img, _ in results:
+                flush_errors.append((img, f"flush: {exc}"))
         except Exception as exc:
             _log(f"  Flush error: {exc}")
-            # Mark all as errored so they don't block reruns
             for img, _ in results:
                 flush_errors.append((img, f"flush: {exc}"))
                 try:
                     mark_processed(input_root, [img], error=f"flush: {exc}")
-                except Exception:
-                    pass
-            for img, _ in errors:
-                try:
-                    mark_processed(input_root, [img], error=str(exc))
                 except Exception:
                     pass
         finally:
@@ -262,6 +269,9 @@ def _run_pass(
     prefetch_t.start()
     flush_t.start()
 
+    consecutive_errors = 0
+    circuit_broken = False
+
     while True:
         item = prefetch_q.get()
         if item is None:
@@ -269,11 +279,12 @@ def _run_pass(
         enriched, batch_dir, copy_errors = item
 
         results = []
-        errors = []
+        inference_errors = []
 
-        # Record copy errors from prefetch
+        # Copy errors are transient — log but don't mark processed.
+        # They stay as processed=0 in the index and will be retried next run.
         for img, err in copy_errors:
-            errors.append((img, f"copy: {err}"))
+            all_errors.append((img, f"copy: {err}"))
             counter.tick(img.name, error=True)
 
         for local, original, _archive_txt in enriched:
@@ -281,12 +292,31 @@ def _run_pass(
                 text = engine.infer(local, prompt)
                 results.append((original, text))
                 counter.tick(original.name)
+                consecutive_errors = 0
             except Exception as exc:
-                errors.append((original, str(exc)))
+                consecutive_errors += 1
+                inference_errors.append((original, str(exc)))
                 counter.tick(original.name, error=True)
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    circuit_broken = True
+                    _log(f"\n  CIRCUIT BREAKER: {MAX_CONSECUTIVE_ERRORS} consecutive errors — aborting pass.")
+                    _log(f"  Last error: {exc}")
+                    break
 
-        all_errors.extend(errors)
-        flush_q.put((results, errors, model_tag, batch_dir))
+        all_errors.extend(inference_errors)
+        flush_q.put((results, inference_errors, model_tag, batch_dir))
+
+        if circuit_broken:
+            break
+
+    # Drain prefetch queue so prefetch thread can finish; clean up buffer dirs
+    if circuit_broken:
+        while True:
+            leftover = prefetch_q.get()
+            if leftover is None:
+                break
+            _, leftover_dir, _ = leftover
+            _clear_buffer(leftover_dir)
 
     flush_q.put(None)
     flush_t.join()
@@ -304,7 +334,7 @@ def run_pipeline(
     input_path: Path,
     model_tag: str,
     model: str,
-    batch_size: int = 500,
+    batch_size: int = 50,
     max_dim: int = DEFAULT_MAX_DIM,
     extensions: set[str] | None = None,
     prompt: str = DEFAULT_PROMPT,

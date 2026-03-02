@@ -69,8 +69,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=500,
-        help="Images per batch (default: 500).",
+        default=50,
+        help="Images per batch (default: 50).",
     )
     parser.add_argument(
         "--max-dim",

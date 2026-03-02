@@ -112,7 +112,16 @@ class HFVisionEngine:
             except Exception as e:
                 print(f"torch.compile skipped: {e}")
 
-        print(f"Model loaded. VRAM: {torch.cuda.memory_allocated() / 1024**3:.1f} GB")
+        free, total = torch.cuda.mem_get_info()
+        free_gb = free / 1024**3
+        total_gb = total / 1024**3
+        used_gb = total_gb - free_gb
+        print(f"Model loaded. VRAM: {used_gb:.1f} / {total_gb:.1f} GB ({free_gb:.1f} GB free)")
+        if free_gb < 2.0:
+            print(
+                f"WARNING: Only {free_gb:.1f} GB VRAM free. Inference may OOM. "
+                "Consider --quantize 4bit or --model qwen3-vl-4b."
+            )
 
     def _prepare_image(self, image_path: Path) -> Image.Image:
         """Load and resize image."""
