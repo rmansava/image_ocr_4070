@@ -360,15 +360,21 @@ def run_pipeline(
     prev_tag = get_scan_meta(input_root, "model_tag")
 
     scan_time = get_scan_meta(input_root, "scan_time")
+    # "phase1_complete" means Phase 1 is done but Phase 2+3 still needed.
+    phase1_only = scan_time == "phase1_complete"
     needs_scan = (
         rescan
         or prev_tag != model_tag
         or not scan_time  # None or empty string = incomplete/no scan
+        or phase1_only   # Phase 1 done but classification not finished
     )
 
     if needs_scan:
         force_full = rescan or prev_tag != model_tag
-        _log(f"Scanning {input_path} for images{' (full rescan)' if force_full else ''}...")
+        if phase1_only and not force_full:
+            _log(f"Resuming scan from Phase 2 (Phase 1 checkpoint exists, skipping NAS image search)...")
+        else:
+            _log(f"Scanning {input_path} for images{' (full rescan)' if force_full else ''}...")
         scan_to_db(input_path, model_tag, extensions, _log, force_full=force_full)
     else:
         stats = get_stats(input_root)

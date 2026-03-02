@@ -136,7 +136,7 @@ SCAN_THREADS = 8  # parallel workers for NAS I/O during scan
 
 def _scan_via_api(
     input_path, exts, existing_paths, model_tag,
-    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+    _classify_dir, _collect, _flush_batch, _write_phase1, log_fn, start, total_images,
 ):
     """Phase 1+2+3 using Synology FileStation API (fast NAS-side search)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -162,6 +162,10 @@ def _scan_via_api(
         f"  Phase 1: {walk_images:,} images in "
         f"{len(dir_images):,} directories [{elapsed:.0f}s]"
     )
+
+    # Checkpoint after Phase 1: write all image paths to DB with pass_num=0
+    # so a restart can skip Phase 1 entirely.
+    _write_phase1(image_paths, dir_images)
 
     # Phase 2: search NAS for archive .txt files
     # NOTE: must use extension param, not pattern — Synology API quirk where
@@ -211,7 +215,7 @@ def _scan_via_api(
 
 def _scan_via_walk(
     input_path, exts, existing_paths, model_tag,
-    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+    _classify_dir, _collect, _flush_batch, _write_phase1, log_fn, start, total_images,
 ):
     """Phase 1+2+3 using os.walk (fallback for local paths)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -219,15 +223,22 @@ def _scan_via_walk(
     # Phase 1: walk source directories (just directory listings)
     log_fn(f"  Phase 1: walking source directories...")
     dir_work = []
+    dir_images = defaultdict(list)
     walk_images = 0
     walk_last_log = 0
+    all_image_paths = []
     for root, dirs, files in os.walk(input_path):
         dirs.sort()
         folder = Path(root)
         image_names = sorted(f for f in files if Path(f).suffix.lower() in exts)
         if not image_names:
             continue
-        dir_work.append((folder, image_names, map_to_archive(folder)))
+        adir = map_to_archive(folder)
+        dir_work.append((folder, image_names, adir))
+        for name in image_names:
+            p = folder / name
+            dir_images[folder].append(name)
+            all_image_paths.append(str(p))
         walk_images += len(image_names)
         if walk_images - walk_last_log >= 10000:
             _status(f"  Phase 1: walking source... {walk_images:,} images, {len(dir_work):,} dirs")
@@ -237,6 +248,9 @@ def _scan_via_walk(
     log_fn(
         f"  Phase 1: {walk_images:,} images in {len(dir_work):,} directories [{elapsed:.0f}s]"
     )
+
+    # Checkpoint after Phase 1
+    _write_phase1(all_image_paths, dir_images)
 
     # Phase 2: walk archive to index existing .txt files
     log_fn(f"  Phase 2: walking archive directories...")
@@ -283,6 +297,81 @@ def _scan_via_walk(
             _collect(classified, dir_total)
 
 
+def _scan_phase2_3_api(
+    input_path, model_tag, image_paths, dir_images,
+    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+):
+    """Phase 2+3 only (used when Phase 1 checkpoint exists): NAS API path."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from .nas_api import search_files, _connect as nas_connect
+
+    nas = nas_connect()
+    archive_root = map_to_archive(input_path)
+    log_fn(f"  Phase 2: searching NAS for archive .txt files (via API)...")
+    txt_paths = search_files(
+        archive_root, ["txt"], log_fn, label=".txt files",
+        use_extension_param=True, nas=nas,
+    )
+    nas.logout()
+
+    archive_index = defaultdict(dict)
+    for unc_path in txt_paths:
+        p = Path(unc_path)
+        archive_index[str(p.parent)][p.stem.lower()] = p
+
+    elapsed = time.perf_counter() - start
+    log_fn(
+        f"  Phase 2: {len(txt_paths):,} archive .txt files in "
+        f"{len(archive_index):,} directories [{elapsed:.0f}s]"
+    )
+
+    dir_work = [(folder, sorted(names), map_to_archive(folder)) for folder, names in dir_images.items()]
+    walk_images = total_images[0]
+    log_fn(f"  Phase 3: classifying {walk_images:,} images ({SCAN_THREADS} threads)...")
+    with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
+        futures = {
+            pool.submit(_classify_dir, folder, names, adir, archive_index.get(str(adir), {})): None
+            for folder, names, adir in dir_work
+        }
+        for future in as_completed(futures):
+            _collect(*future.result())
+
+
+def _scan_phase2_3_walk(
+    input_path, model_tag, dir_images,
+    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+):
+    """Phase 2+3 only (used when Phase 1 checkpoint exists): local walk path."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    archive_root = map_to_archive(input_path)
+    archive_index = {}
+    txt_count = 0
+    log_fn(f"  Phase 2: walking archive directories...")
+    if archive_root.is_dir():
+        for root, dirs, files in os.walk(archive_root):
+            dirs.sort()
+            folder = Path(root)
+            txt_files = {Path(f).stem.lower(): folder / f for f in files if Path(f).suffix.lower() == ".txt"}
+            if txt_files:
+                archive_index[str(folder)] = txt_files
+                txt_count += len(txt_files)
+
+    elapsed = time.perf_counter() - start
+    log_fn(f"  Phase 2: {txt_count:,} archive .txt files [{elapsed:.0f}s]")
+
+    dir_work = [(folder, sorted(names), map_to_archive(folder)) for folder, names in dir_images.items()]
+    walk_images = total_images[0]
+    log_fn(f"  Phase 3: classifying {walk_images:,} images ({SCAN_THREADS} threads)...")
+    with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
+        futures = {
+            pool.submit(_classify_dir, folder, names, adir, archive_index.get(str(adir), {})): None
+            for folder, names, adir in dir_work
+        }
+        for future in as_completed(futures):
+            _collect(*future.result())
+
+
 def scan_to_db(
     input_path: Path,
     model_tag: str,
@@ -309,26 +398,38 @@ def scan_to_db(
     exts = extensions or IMAGE_EXTENSIONS
     input_root = _input_root_key(input_path)
 
-    # Clear scan_time BEFORE any changes. If we crash mid-scan, the next
-    # run will see no scan_time and resume the incremental scan.
-    set_scan_meta(input_root, "scan_time", "")
-    set_scan_meta(input_root, "model_tag", model_tag)
-
     conn = _connect()
     cur = conn.cursor()
     cur.fast_executemany = True
 
-    existing_paths = set()
+    # Check for Phase 1 checkpoint: images already in DB from a previous run
+    # that was interrupted after Phase 1 but before Phase 3 completed.
+    prev_scan_time = get_scan_meta(input_root, "scan_time")
+    phase1_resume = (not force_full) and prev_scan_time == "phase1_complete"
+
     if force_full:
         cur.execute("DELETE FROM ocr_images WHERE input_root=?", (input_root,))
         conn.commit()
         log_fn(f"  Full rescan — cleared previous index")
-    else:
-        # Incremental: load already-indexed paths so we can skip them
-        cur.execute("SELECT image_path FROM ocr_images WHERE input_root=?", (input_root,))
+        set_scan_meta(input_root, "scan_time", "")
+
+    set_scan_meta(input_root, "model_tag", model_tag)
+
+    existing_paths = set()
+    if not force_full:
+        # Load already-classified paths (pass_num 1 or 2) — skip in Phase 3.
+        # pass_num=0 rows are Phase 1 placeholders that still need classification.
+        cur.execute(
+            "SELECT image_path FROM ocr_images WHERE input_root=? AND pass_num > 0",
+            (input_root,),
+        )
         existing_paths = {row[0] for row in cur.fetchall()}
         if existing_paths:
-            log_fn(f"  Resuming scan ({len(existing_paths):,} images already indexed)")
+            log_fn(f"  Resuming scan ({len(existing_paths):,} images already classified)")
+
+    # phase1_paths: set of image_path strings written to DB with pass_num=0.
+    # Phase 3 UPDATEs these rows to final pass_num instead of INSERTing.
+    phase1_paths = set()
 
     new_count = 0
     update_count = 0
@@ -339,6 +440,36 @@ def scan_to_db(
     batch = []
     start = time.perf_counter()
     last_log = 0
+
+    def _write_phase1(image_paths, dir_images):
+        """Bulk-write all image paths to DB with pass_num=0 as a checkpoint.
+
+        After this, a restart can skip Phase 1 (NAS image search) entirely.
+        Rows already in existing_paths are skipped.
+        """
+        nonlocal phase1_paths
+        rows = []
+        for img_str in image_paths:
+            if img_str in existing_paths:
+                continue
+            p = Path(img_str)
+            archive_txt = str(map_to_archive(p).with_suffix(".txt"))
+            rows.append((img_str, input_root, archive_txt, 0, False, None))
+            phase1_paths.add(img_str)
+        if rows:
+            cur.fast_executemany = True
+            # Use MERGE to skip rows already indexed under a different input_root
+            cur.executemany(
+                "MERGE ocr_images AS t "
+                "USING (SELECT ? AS ip, ? AS ir, ? AS at, ? AS pn, ? AS pr, ? AS er) AS s "
+                "ON t.image_path = s.ip "
+                "WHEN NOT MATCHED THEN INSERT (image_path, input_root, archive_txt, pass_num, processed, error) "
+                "VALUES(s.ip, s.ir, s.at, s.pn, s.pr, s.er);",
+                rows,
+            )
+            conn.commit()
+        set_scan_meta(input_root, "scan_time", "phase1_complete")
+        log_fn(f"  Phase 1 checkpoint: {len(phase1_paths):,} new images written to DB")
 
     def _classify_dir(folder, image_names, archive_dir, archive_stems):
         """Classify images in one source directory against the archive.
@@ -375,11 +506,20 @@ def scan_to_db(
         nonlocal batch
         if not batch:
             return
-        cur.executemany(
-            "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
-            "VALUES(?, ?, ?, ?, ?, ?)",
-            batch,
-        )
+        # Rows already written in Phase 1 get UPDATEd; new rows get INSERTed.
+        updates = [(r[3], r[2], r[0]) for r in batch if r[0] in phase1_paths]
+        inserts = [r for r in batch if r[0] not in phase1_paths]
+        if updates:
+            cur.executemany(
+                "UPDATE ocr_images SET pass_num=?, archive_txt=? WHERE image_path=? AND input_root='" + input_root + "'",
+                updates,
+            )
+        if inserts:
+            cur.executemany(
+                "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
+                "VALUES(?, ?, ?, ?, ?, ?)",
+                inserts,
+            )
         conn.commit()
         batch = []
 
@@ -438,15 +578,44 @@ def scan_to_db(
             or input_str.lower().startswith("t:/")
         )
 
-        if is_nas:
+        if phase1_resume:
+            # Phase 1 already done — load the pass_num=0 placeholder rows and
+            # go straight to Phase 2+3 to classify them.
+            cur.execute(
+                "SELECT image_path, archive_txt FROM ocr_images "
+                "WHERE input_root=? AND pass_num=0",
+                (input_root,),
+            )
+            p1_rows = cur.fetchall()
+            phase1_paths.update(row[0] for row in p1_rows)
+            log_fn(f"  Skipping Phase 1 ({len(phase1_paths):,} images from checkpoint)")
+            # Rebuild dir_images from the checkpoint rows
+            dir_images = defaultdict(list)
+            for img_str, _ in p1_rows:
+                p = Path(img_str)
+                dir_images[p.parent].append(p.name)
+            image_paths = [row[0] for row in p1_rows]
+            total_images[0] = len(image_paths)
+            # Phase 2+3 only
+            if is_nas:
+                _scan_phase2_3_api(
+                    input_path, model_tag, image_paths, dir_images,
+                    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+                )
+            else:
+                _scan_phase2_3_walk(
+                    input_path, model_tag, dir_images,
+                    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+                )
+        elif is_nas:
             _scan_via_api(
                 input_path, exts, existing_paths, model_tag,
-                _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+                _classify_dir, _collect, _flush_batch, _write_phase1, log_fn, start, total_images,
             )
         else:
             _scan_via_walk(
                 input_path, exts, existing_paths, model_tag,
-                _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
+                _classify_dir, _collect, _flush_batch, _write_phase1, log_fn, start, total_images,
             )
 
     _flush_batch()
