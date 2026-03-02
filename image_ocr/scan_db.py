@@ -331,6 +331,7 @@ def scan_to_db(
     new_count = 0
     update_count = 0
     scan_count = 0
+    dirs_done = 0
     skip_count = len(existing_paths)
     batch = []
     start = time.perf_counter()
@@ -381,25 +382,27 @@ def scan_to_db(
 
     def _collect(classified, dir_total):
         """Collect results from one directory into counters and batch."""
-        nonlocal scan_count, new_count, update_count, last_log
+        nonlocal scan_count, new_count, update_count, dirs_done, last_log
         scan_count += dir_total
+        dirs_done += 1
         for img_str, archive_txt_str, pass_num in classified:
             batch.append((img_str, input_root, archive_txt_str, pass_num, False, None))
             if pass_num == 1:
                 new_count += 1
             else:
                 update_count += 1
-            if (new_count + update_count) % 100 == 0:
-                elapsed = time.perf_counter() - start
-                _status(
-                    f"  Phase 3: {scan_count:,} scanned, "
-                    f"{new_count:,} new, {update_count:,} update [{elapsed:.0f}s]"
-                )
+        elapsed = time.perf_counter() - start
+        rate = scan_count / elapsed if elapsed > 0 else 0
+        _status(
+            f"  Phase 3: {dirs_done:,} dirs, {scan_count:,} images "
+            f"({new_count:,} new, {update_count:,} update) "
+            f"@ {rate:.0f} img/s [{elapsed:.0f}s]"
+        )
         if scan_count - last_log >= 10000:
-            elapsed = time.perf_counter() - start
             log_fn(
-                f"  Phase 3: {scan_count:,} scanned "
-                f"({new_count:,} new, {update_count:,} update) [{elapsed:.0f}s]"
+                f"  Phase 3: {dirs_done:,} dirs, {scan_count:,} images "
+                f"({new_count:,} new, {update_count:,} update) "
+                f"@ {rate:.0f} img/s [{elapsed:.0f}s]"
             )
             last_log = scan_count
         if len(batch) >= 5000:
