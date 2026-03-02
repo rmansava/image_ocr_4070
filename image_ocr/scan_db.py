@@ -136,7 +136,7 @@ SCAN_THREADS = 8  # parallel workers for NAS I/O during scan
 
 def _scan_via_api(
     input_path, exts, existing_paths, model_tag,
-    _classify_dir, _collect, _flush_batch, log_fn, start,
+    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
 ):
     """Phase 1+2+3 using Synology FileStation API (fast NAS-side search)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -194,7 +194,8 @@ def _scan_via_api(
         adir = map_to_archive(folder)
         dir_work.append((folder, sorted(names), adir))
 
-    log_fn(f"  Phase 3: classifying {walk_images:,} images across {len(dir_work):,} dirs ({SCAN_THREADS} threads)...")
+    total_images[0] = walk_images
+    log_fn(f"  Phase 3: classifying {walk_images:,} images ({SCAN_THREADS} threads)...")
     with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
         futures = {
             pool.submit(
@@ -210,7 +211,7 @@ def _scan_via_api(
 
 def _scan_via_walk(
     input_path, exts, existing_paths, model_tag,
-    _classify_dir, _collect, _flush_batch, log_fn, start,
+    _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
 ):
     """Phase 1+2+3 using os.walk (fallback for local paths)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -267,7 +268,8 @@ def _scan_via_walk(
     )
 
     # Phase 3: classify in parallel (tag reads only — existence is in-memory)
-    log_fn(f"  Phase 3: classifying {walk_images:,} images across {len(dir_work):,} dirs ({SCAN_THREADS} threads)...")
+    total_images[0] = walk_images
+    log_fn(f"  Phase 3: classifying {walk_images:,} images ({SCAN_THREADS} threads)...")
     with ThreadPoolExecutor(max_workers=SCAN_THREADS) as pool:
         futures = {
             pool.submit(
@@ -332,6 +334,7 @@ def scan_to_db(
     update_count = 0
     scan_count = 0
     dirs_done = 0
+    total_images = [0]  # mutable so _scan_via_* can set it before Phase 3
     skip_count = len(existing_paths)
     batch = []
     start = time.perf_counter()
@@ -393,14 +396,16 @@ def scan_to_db(
                 update_count += 1
         elapsed = time.perf_counter() - start
         rate = scan_count / elapsed if elapsed > 0 else 0
+        tot = total_images[0]
+        pct = f"{100 * scan_count / tot:.1f}%" if tot else ""
         _status(
-            f"  Phase 3: {dirs_done:,} dirs, {scan_count:,} images "
+            f"  Phase 3: {scan_count:,}/{tot:,} {pct} "
             f"({new_count:,} new, {update_count:,} update) "
             f"@ {rate:.0f} img/s [{elapsed:.0f}s]"
         )
         if scan_count - last_log >= 10000:
             log_fn(
-                f"  Phase 3: {dirs_done:,} dirs, {scan_count:,} images "
+                f"  Phase 3: {scan_count:,}/{tot:,} {pct} "
                 f"({new_count:,} new, {update_count:,} update) "
                 f"@ {rate:.0f} img/s [{elapsed:.0f}s]"
             )
@@ -436,12 +441,12 @@ def scan_to_db(
         if is_nas:
             _scan_via_api(
                 input_path, exts, existing_paths, model_tag,
-                _classify_dir, _collect, _flush_batch, log_fn, start,
+                _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
             )
         else:
             _scan_via_walk(
                 input_path, exts, existing_paths, model_tag,
-                _classify_dir, _collect, _flush_batch, log_fn, start,
+                _classify_dir, _collect, _flush_batch, log_fn, start, total_images,
             )
 
     _flush_batch()
