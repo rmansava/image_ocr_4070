@@ -1,0 +1,334 @@
+
+============================================================
+Session: 2026-03-02 15:52:11 | Input: \\10.10.10.2\trivia\archiverelated\board games | Model: qwen3-vl-8b
+============================================================
+[15:52:11] Scanning \\10.10.10.2\trivia\archiverelated\board games for images...
+[15:52:11]   Resuming scan (331,960 images already classified)
+[15:52:13]   Phase 1: searching NAS for images (via API)...
+[15:52:13]   Searching NAS for images (7 extensions)...
+[15:52:13]   Searching .bmp (1/7)...
+[15:53:20]   .bmp: 0 found — total 0 images [67s]
+[15:53:20]   Searching .tiff (2/7)...
+
+============================================================
+Session: 2026-03-02 15:54:23 | Input: \\10.10.10.2\trivia\archiverelated\board games | Model: qwen3-vl-8b
+============================================================
+[15:54:23] Scanning \\10.10.10.2\trivia\archiverelated\board games for images...
+[15:54:23]   Resuming scan (331,960 images already classified)
+[15:54:25]   Phase 1: searching NAS for images (via API)...
+[15:54:25]   Searching NAS for images (7 extensions)...
+[15:54:25]   Searching .tif (1/7)...
+[15:55:30]   .tif: 0 found — total 0 images [66s]
+[15:55:30]   Searching .webp (2/7)...
+[15:56:36]   .webp: 0 found — total 0 images [131s]
+[15:56:36]   Searching .jpg (3/7)...
+[15:56:56]     .jpg: 18,905 images found so far [20s]
+[15:56:58]     .jpg: 35,167 images found so far [23s]
+[15:57:00]     .jpg: 51,019 images found so far [25s]
+[15:57:02]     .jpg: 66,004 images found so far [27s]
+[15:57:04]     .jpg: 81,933 images found so far [29s]
+[15:57:06]     .jpg: 97,460 images found so far [31s]
+[15:57:09]     .jpg: 112,532 images found so far [33s]
+[15:57:11]     .jpg: 127,138 images found so far [35s]
+[15:57:13]     .jpg: 141,527 images found so far [37s]
+[15:57:15]     .jpg: 155,997 images found so far [39s]
+[15:57:17]     .jpg: 170,446 images found so far [41s]
+[15:57:19]     .jpg: 185,308 images found so far [43s]
+[15:57:21]     .jpg: 200,317 images found so far [45s]
+[15:57:23]     .jpg: 215,500 images found so far [48s]
+[15:57:27]     .jpg: 239,902 images found so far [52s]
+[15:57:30]     .jpg: 254,364 images found so far [54s]
+[15:57:32]     .jpg: 269,029 images found so far [56s]
+[15:57:34]     .jpg: 282,572 images found so far [58s]
+[15:57:36]     .jpg: 294,790 images found so far [60s]
+[15:57:38]     .jpg: 307,224 images found so far [63s]
+[15:57:40]     .jpg: 319,865 images found so far [65s]
+[15:57:42]     .jpg: 332,560 images found so far [67s]
+[15:57:45]     .jpg: 346,103 images found so far [69s]
+[15:57:47]     .jpg: 358,366 images found so far [71s]
+[15:57:49]     .jpg: 371,292 images found so far [73s]
+[15:57:51]     .jpg: 383,875 images found so far [75s]
+[15:57:53]     .jpg: 396,901 images found so far [77s]
+[15:57:55]     .jpg: 409,653 images found so far [79s]
+[15:57:57]     .jpg: 423,571 images found so far [82s]
+[15:57:59]     .jpg: 437,294 images found so far [84s]
+[15:58:02]     .jpg: 449,317 images found so far [86s]
+[15:58:04]     .jpg: 462,103 images found so far [88s]
+[15:58:06]     .jpg: 474,646 images found so far [90s]
+[15:58:08]     .jpg: 486,765 images found so far [92s]
+[15:58:10]     .jpg: 499,431 images found so far [94s]
+[15:58:12]     .jpg: 511,509 images found so far [97s]
+[15:58:14]     .jpg: 524,297 images found so far [99s]
+[15:58:16]     .jpg: 536,639 images found so far [101s]
+[15:58:19]     .jpg: 549,705 images found so far [103s]
+[15:58:21]     .jpg: 562,810 images found so far [105s]
+[15:58:23]     .jpg: 575,937 images found so far [107s]
+[15:58:25]     .jpg: 588,648 images found so far [109s]
+[15:58:27]     .jpg: 600,428 images found so far [111s]
+[15:58:29]     .jpg: 612,501 images found so far [114s]
+[15:58:34]     .jpg: 633,732 images found so far [118s]
+[15:58:36]     .jpg: 645,912 images found so far [120s]
+[15:58:38]     .jpg: 658,308 images found so far [122s]
+[15:58:40]     .jpg: 669,599 images found so far [124s]
+[15:58:42]     .jpg: 682,373 images found so far [127s]
+[15:58:44]     .jpg: 694,486 images found so far [129s]
+[15:58:46]     .jpg: 706,481 images found so far [131s]
+[15:58:49]     .jpg: 717,178 images found so far [133s]
+[15:58:51]     .jpg: 727,434 images found so far [135s]
+[15:58:53]     .jpg: 738,767 images found so far [137s]
+[15:58:55]     .jpg: 750,150 images found so far [139s]
+[15:58:57]     .jpg: 761,657 images found so far [142s]
+[15:58:59]     .jpg: 773,907 images found so far [144s]
+[15:59:02]     .jpg: 784,359 images found so far [146s]
+[15:59:04]     .jpg: 795,423 images found so far [148s]
+[15:59:06]     .jpg: 807,577 images found so far [150s]
+[15:59:08]     .jpg: 818,855 images found so far [153s]
+[16:00:21]   .jpg: 827,229 found — total 827,229 images [356s]
+[16:00:21]   Searching .png (4/7)...
+[16:01:28]   .png: 0 found — total 827,229 images [423s]
+[16:01:28]   Searching .bmp (5/7)...
+[16:02:33]   .bmp: 0 found — total 827,229 images [488s]
+[16:02:33]   Searching .tiff (6/7)...
+[16:03:38]   .tiff: 0 found — total 827,229 images [553s]
+[16:03:38]   Searching .jpeg (7/7)...
+[16:04:43]   .jpeg: 0 found — total 827,229 images [619s]
+[16:04:43]   NAS search complete: 827,229 images [619s]
+[16:04:48]   Phase 1: 827,229 images in 182,882 directories [625s]
+[16:04:48]   Phase 1 checkpoint: preparing 827,229 paths...
+[16:04:52]   Phase 1 checkpoint: staging 495,269 paths...
+[16:04:54]   Phase 1 checkpoint: 50,000/495,269 staged...
+[16:04:56]   Phase 1 checkpoint: 100,000/495,269 staged...
+[16:04:58]   Phase 1 checkpoint: 150,000/495,269 staged...
+[16:05:00]   Phase 1 checkpoint: 200,000/495,269 staged...
+[16:05:02]   Phase 1 checkpoint: 250,000/495,269 staged...
+[16:05:04]   Phase 1 checkpoint: 300,000/495,269 staged...
+[16:05:07]   Phase 1 checkpoint: 350,000/495,269 staged...
+[16:05:09]   Phase 1 checkpoint: 400,000/495,269 staged...
+[16:05:11]   Phase 1 checkpoint: 450,000/495,269 staged...
+[16:05:14]   Phase 1 checkpoint: 495,269/495,269 staged...
+[16:05:14]   Phase 1 checkpoint: committing to ocr_images (deduplicating)...
+[16:05:22]   Phase 1 checkpoint: 495,231 images tracked, scan resumable
+[16:05:22]   Phase 2: searching NAS for archive .txt files (via API)...
+[16:05:22]   Searching NAS for .txt files (1 extensions)...
+[16:05:22]   Searching .txt (1/1)...
+[16:05:46]     .txt: 14,718 .txt files found so far [24s]
+[16:05:48]     .txt: 30,250 .txt files found so far [26s]
+[16:05:50]     .txt: 44,426 .txt files found so far [29s]
+[16:05:52]     .txt: 55,815 .txt files found so far [31s]
+[16:05:54]     .txt: 66,721 .txt files found so far [33s]
+[16:05:57]     .txt: 78,945 .txt files found so far [35s]
+[16:05:59]     .txt: 90,156 .txt files found so far [37s]
+[16:06:03]     .txt: 107,190 .txt files found so far [41s]
+[16:06:07]     .txt: 129,261 .txt files found so far [45s]
+[16:06:09]     .txt: 143,967 .txt files found so far [47s]
+[16:06:11]     .txt: 158,691 .txt files found so far [50s]
+[16:06:13]     .txt: 172,785 .txt files found so far [52s]
+[16:06:15]     .txt: 187,324 .txt files found so far [54s]
+[16:06:17]     .txt: 201,961 .txt files found so far [56s]
+[16:06:20]     .txt: 216,513 .txt files found so far [58s]
+[16:06:22]     .txt: 230,418 .txt files found so far [60s]
+[16:06:24]     .txt: 243,619 .txt files found so far [62s]
+[16:06:26]     .txt: 256,701 .txt files found so far [64s]
+[16:06:28]     .txt: 269,891 .txt files found so far [66s]
+[16:06:30]     .txt: 280,347 .txt files found so far [68s]
+[16:06:32]     .txt: 293,357 .txt files found so far [70s]
+[16:06:34]     .txt: 306,906 .txt files found so far [73s]
+[16:06:36]     .txt: 319,643 .txt files found so far [75s]
+[16:06:38]     .txt: 332,161 .txt files found so far [77s]
+[16:06:40]     .txt: 344,496 .txt files found so far [79s]
+[16:06:43]     .txt: 357,852 .txt files found so far [81s]
+[16:06:45]     .txt: 370,987 .txt files found so far [83s]
+[16:06:47]     .txt: 383,707 .txt files found so far [85s]
+[16:06:49]     .txt: 397,075 .txt files found so far [87s]
+[16:06:51]     .txt: 410,220 .txt files found so far [89s]
+[16:06:53]     .txt: 424,660 .txt files found so far [92s]
+[16:06:56]     .txt: 437,454 .txt files found so far [94s]
+[16:06:58]     .txt: 450,313 .txt files found so far [96s]
+[16:07:00]     .txt: 460,512 .txt files found so far [98s]
+[16:07:02]     .txt: 473,384 .txt files found so far [100s]
+[16:07:04]     .txt: 486,442 .txt files found so far [102s]
+[16:07:06]     .txt: 498,978 .txt files found so far [105s]
+[16:07:08]     .txt: 511,380 .txt files found so far [107s]
+[16:07:10]     .txt: 524,156 .txt files found so far [109s]
+[16:07:12]     .txt: 537,139 .txt files found so far [111s]
+[16:07:15]     .txt: 550,649 .txt files found so far [113s]
+[16:07:17]     .txt: 563,387 .txt files found so far [115s]
+[16:07:19]     .txt: 576,011 .txt files found so far [117s]
+[16:07:21]     .txt: 588,595 .txt files found so far [119s]
+[16:07:23]     .txt: 601,363 .txt files found so far [122s]
+[16:07:25]     .txt: 614,215 .txt files found so far [124s]
+[16:07:27]     .txt: 626,531 .txt files found so far [126s]
+[16:07:30]     .txt: 637,329 .txt files found so far [128s]
+[16:07:32]     .txt: 649,582 .txt files found so far [130s]
+[16:07:34]     .txt: 660,694 .txt files found so far [132s]
+[16:07:36]     .txt: 671,560 .txt files found so far [134s]
+[16:07:38]     .txt: 682,766 .txt files found so far [137s]
+[16:07:40]     .txt: 694,285 .txt files found so far [139s]
+[16:07:42]     .txt: 705,734 .txt files found so far [141s]
+[16:07:45]     .txt: 717,037 .txt files found so far [143s]
+[16:07:47]     .txt: 727,494 .txt files found so far [145s]
+[16:07:49]     .txt: 738,453 .txt files found so far [147s]
+[16:07:51]     .txt: 749,453 .txt files found so far [149s]
+[16:08:48]   .txt: 751,359 found — total 751,359 .txt files [207s]
+[16:08:48]   NAS search complete: 751,359 .txt files [207s]
+[16:08:49]   Phase 2: building archive index from 751,359 .txt paths...
+[16:08:55]   Phase 2: 751,359 archive .txt files in 204,140 directories [872s]
+[16:08:56]   Phase 3: classifying 827,229 images (8 threads)...
+[16:09:00]   Phase 3: 10,282/827,229 1.2% (0 new, 2 update) @ 12 img/s [877s]
+[16:09:05]   Phase 3: 20,314/827,229 2.5% (355 new, 9,639 update) @ 23 img/s [881s]
+[16:09:10]   Phase 3: 30,356/827,229 3.7% (1,081 new, 18,955 update) @ 34 img/s [887s]
+[16:09:16]   Phase 3: 40,369/827,229 4.9% (1,787 new, 28,262 update) @ 45 img/s [892s]
+[16:09:18]   Phase 3: 50,379/827,229 6.1% (2,128 new, 33,372 update) @ 56 img/s [895s]
+[16:09:18]   Phase 3: 60,421/827,229 7.3% (2,128 new, 33,372 update) @ 67 img/s [895s]
+[16:09:18]   Phase 3: 70,425/827,229 8.5% (2,128 new, 33,372 update) @ 79 img/s [895s]
+[16:09:21]   Phase 3: 80,432/827,229 9.7% (2,854 new, 37,953 update) @ 90 img/s [897s]
+[16:09:24]   Phase 3: 90,437/827,229 10.9% (7,123 new, 43,687 update) @ 100 img/s [900s]
+[16:09:27]   Phase 3: 100,446/827,229 12.1% (11,272 new, 49,547 update) @ 111 img/s [904s]
+[16:09:29]   Phase 3: 110,453/827,229 13.4% (14,009 new, 53,323 update) @ 122 img/s [906s]
+[16:09:29]   Phase 3: 120,468/827,229 14.6% (14,009 new, 53,323 update) @ 133 img/s [906s]
+[16:09:30]   Phase 3: 130,476/827,229 15.8% (14,836 new, 54,600 update) @ 144 img/s [907s]
+[16:09:33]   Phase 3: 140,476/827,229 17.0% (18,913 new, 60,523 update) @ 154 img/s [910s]
+[16:09:36]   Phase 3: 150,487/827,229 18.2% (22,925 new, 66,502 update) @ 165 img/s [912s]
+[16:09:36]   Phase 3: 160,518/827,229 19.4% (22,925 new, 66,503 update) @ 176 img/s [912s]
+[16:09:36]   Phase 3: 170,557/827,229 20.6% (23,820 new, 68,108 update) @ 187 img/s [913s]
+[16:09:40]   Phase 3: 180,557/827,229 21.8% (27,692 new, 74,196 update) @ 197 img/s [917s]
+[16:09:44]   Phase 3: 190,590/827,229 23.0% (31,555 new, 80,366 update) @ 207 img/s [921s]
+[16:09:46]   Phase 3: 200,591/827,229 24.2% (33,677 new, 83,796 update) @ 217 img/s [923s]
+[16:09:50]   Phase 3: 210,594/827,229 25.5% (36,919 new, 89,988 update) @ 227 img/s [926s]
+[16:09:50]   Phase 3: 220,596/827,229 26.7% (37,271 new, 90,579 update) @ 238 img/s [927s]
+[16:09:52]   Phase 3: 230,630/827,229 27.9% (39,732 new, 94,698 update) @ 248 img/s [929s]
+[16:09:54]   Phase 3: 240,669/827,229 29.1% (42,200 new, 99,014 update) @ 259 img/s [931s]
+[16:09:57]   Phase 3: 250,687/827,229 30.3% (45,333 new, 104,053 update) @ 269 img/s [934s]
+[16:09:57]   Phase 3: 260,689/827,229 31.5% (45,333 new, 104,053 update) @ 279 img/s [934s]
+[16:10:00]   Phase 3: 270,703/827,229 32.7% (48,201 new, 109,410 update) @ 289 img/s [936s]
+[16:10:02]   Phase 3: 280,723/827,229 33.9% (51,240 new, 114,826 update) @ 299 img/s [939s]
+[16:10:04]   Phase 3: 290,723/827,229 35.1% (52,883 new, 118,620 update) @ 309 img/s [941s]
+[16:10:05]   Phase 3: 300,756/827,229 36.4% (54,491 new, 122,333 update) @ 319 img/s [942s]
+[16:10:07]   Phase 3: 310,769/827,229 37.6% (56,328 new, 125,923 update) @ 329 img/s [944s]
+[16:10:09]   Phase 3: 320,788/827,229 38.8% (57,909 new, 129,156 update) @ 339 img/s [946s]
+[16:10:11]   Phase 3: 330,795/827,229 40.0% (59,821 new, 132,672 update) @ 349 img/s [948s]
+[16:10:15]   Phase 3: 340,827/827,229 41.2% (62,901 new, 138,059 update) @ 358 img/s [951s]
+[16:10:17]   Phase 3: 350,852/827,229 42.4% (65,591 new, 142,967 update) @ 368 img/s [954s]
+[16:10:18]   Phase 3: 360,854/827,229 43.6% (66,788 new, 145,179 update) @ 378 img/s [955s]
+[16:10:20]   Phase 3: 370,854/827,229 44.8% (68,138 new, 148,125 update) @ 388 img/s [957s]
+[16:10:21]   Phase 3: 380,865/827,229 46.0% (69,548 new, 150,891 update) @ 398 img/s [958s]
+[16:10:23]   Phase 3: 390,865/827,229 47.2% (71,057 new, 154,027 update) @ 407 img/s [959s]
+[16:10:25]   Phase 3: 400,888/827,229 48.5% (73,438 new, 158,667 update) @ 417 img/s [962s]
+[16:10:26]   Phase 3: 410,898/827,229 49.7% (74,636 new, 161,267 update) @ 427 img/s [963s]
+[16:10:29]   Phase 3: 420,915/827,229 50.9% (76,645 new, 165,041 update) @ 436 img/s [965s]
+[16:10:32]   Phase 3: 430,918/827,229 52.1% (79,391 new, 170,914 update) @ 445 img/s [968s]
+[16:10:34]   Phase 3: 440,937/827,229 53.3% (81,979 new, 176,206 update) @ 454 img/s [971s]
+[16:10:36]   Phase 3: 450,951/827,229 54.5% (83,346 new, 178,897 update) @ 464 img/s [972s]
+[16:10:38]   Phase 3: 460,956/827,229 55.7% (85,784 new, 183,573 update) @ 473 img/s [975s]
+[16:10:39]   Phase 3: 470,956/827,229 56.9% (87,523 new, 186,993 update) @ 482 img/s [976s]
+[16:10:42]   Phase 3: 480,956/827,229 58.1% (89,479 new, 191,458 update) @ 492 img/s [979s]
+[16:10:44]   Phase 3: 490,978/827,229 59.4% (91,214 new, 194,922 update) @ 501 img/s [980s]
+[16:10:47]   Phase 3: 500,978/827,229 60.6% (93,566 new, 199,904 update) @ 509 img/s [984s]
+[16:10:50]   Phase 3: 510,979/827,229 61.8% (96,742 new, 206,435 update) @ 518 img/s [987s]
+[16:10:54]   Phase 3: 520,989/827,229 63.0% (99,410 new, 212,275 update) @ 526 img/s [990s]
+[16:10:55]   Phase 3: 530,995/827,229 64.2% (100,453 new, 214,776 update) @ 536 img/s [992s]
+[16:10:56]   Phase 3: 540,995/827,229 65.4% (101,361 new, 216,695 update) @ 545 img/s [992s]
+[16:10:59]   Phase 3: 550,995/827,229 66.6% (104,308 new, 223,293 update) @ 553 img/s [996s]
+[16:11:02]   Phase 3: 560,995/827,229 67.8% (106,652 new, 227,605 update) @ 562 img/s [998s]
+[16:11:04]   Phase 3: 570,996/827,229 69.0% (108,854 new, 231,923 update) @ 571 img/s [1001s]
+[16:11:06]   Phase 3: 581,015/827,229 70.2% (110,961 new, 236,513 update) @ 579 img/s [1003s]
+[16:11:08]   Phase 3: 591,046/827,229 71.4% (113,072 new, 241,021 update) @ 588 img/s [1005s]
+[16:11:10]   Phase 3: 601,051/827,229 72.7% (114,773 new, 244,771 update) @ 597 img/s [1007s]
+[16:11:11]   Phase 3: 611,082/827,229 73.9% (115,719 new, 246,577 update) @ 606 img/s [1008s]
+[16:11:14]   Phase 3: 621,083/827,229 75.1% (118,215 new, 251,945 update) @ 615 img/s [1010s]
+[16:11:16]   Phase 3: 631,083/827,229 76.3% (119,889 new, 256,078 update) @ 623 img/s [1013s]
+[16:11:19]   Phase 3: 641,084/827,229 77.5% (122,303 new, 261,076 update) @ 631 img/s [1016s]
+[16:11:21]   Phase 3: 651,084/827,229 78.7% (123,807 new, 264,627 update) @ 640 img/s [1018s]
+[16:11:23]   Phase 3: 661,098/827,229 79.9% (125,624 new, 268,942 update) @ 648 img/s [1020s]
+[16:11:25]   Phase 3: 671,099/827,229 81.1% (126,971 new, 272,164 update) @ 657 img/s [1022s]
+[16:11:27]   Phase 3: 681,131/827,229 82.3% (129,190 new, 276,427 update) @ 665 img/s [1024s]
+[16:11:29]   Phase 3: 691,131/827,229 83.5% (130,714 new, 279,965 update) @ 674 img/s [1026s]
+[16:11:31]   Phase 3: 701,146/827,229 84.8% (132,703 new, 284,451 update) @ 682 img/s [1028s]
+[16:11:33]   Phase 3: 711,157/827,229 86.0% (136,699 new, 287,543 update) @ 691 img/s [1029s]
+[16:11:35]   Phase 3: 721,171/827,229 87.2% (140,958 new, 290,059 update) @ 699 img/s [1032s]
+[16:11:36]   Phase 3: 731,175/827,229 88.4% (143,866 new, 292,451 update) @ 708 img/s [1033s]
+[16:11:38]   Phase 3: 741,177/827,229 89.6% (148,073 new, 295,728 update) @ 716 img/s [1035s]
+[16:11:39]   Phase 3: 751,177/827,229 90.8% (151,389 new, 298,200 update) @ 725 img/s [1036s]
+[16:11:41]   Phase 3: 761,184/827,229 92.0% (154,534 new, 300,422 update) @ 734 img/s [1037s]
+[16:11:43]   Phase 3: 771,197/827,229 93.2% (159,050 new, 303,289 update) @ 742 img/s [1039s]
+[16:11:44]   Phase 3: 781,197/827,229 94.4% (162,460 new, 305,174 update) @ 751 img/s [1041s]
+[16:11:45]   Phase 3: 791,197/827,229 95.6% (166,395 new, 307,473 update) @ 759 img/s [1042s]
+[16:11:47]   Phase 3: 801,224/827,229 96.9% (171,178 new, 310,438 update) @ 768 img/s [1044s]
+[16:11:48]   Phase 3: 811,224/827,229 98.1% (174,042 new, 312,497 update) @ 776 img/s [1045s]
+[16:11:50]   Phase 3: 821,238/827,229 99.3% (177,196 new, 315,172 update) @ 785 img/s [1046s]
+[16:11:51]   Scan complete: 827,229 images (331,960 existing, 178,809 new, 316,460 update) [1048s]
+[16:11:51] Input root: //10.10.10.2/trivia/archiverelated/board games
+[16:11:51] Local buffer: C:\ocrbuffer\board games (prefetch depth: 20)
+[16:11:51] Work: 510,751 new + 316,440 updates = 827,191 total
+[16:11:51] 
+[16:11:52] FATAL ERROR: cannot import name 'Qwen2_5_VLForConditionalGeneration' from 'transformers' (C:\Users\rmans\AppData\Roaming\Python\Python312\site-packages\transformers\__init__.py)
+[16:11:53] Traceback (most recent call last):
+  File "C:\Users\rmans\image_ocr_4070\image_ocr\pipeline.py", line 371, in run_pipeline
+    return _run_pipeline_inner(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rmans\image_ocr_4070\image_ocr\pipeline.py", line 456, in _run_pipeline_inner
+    engine.load()
+  File "C:\Users\rmans\image_ocr_4070\image_ocr\hf_engine.py", line 89, in load
+    from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+ImportError: cannot import name 'Qwen2_5_VLForConditionalGeneration' from 'transformers' (C:\Users\rmans\AppData\Roaming\Python\Python312\site-packages\transformers\__init__.py)
+
+
+============================================================
+Session: 2026-03-02 17:51:35 | Input: \\10.10.10.2\trivia\archiverelated\board games | Model: qwen3-vl-8b
+============================================================
+[17:51:35] Using existing scan index (510,751 new, 316,440 updates remaining)
+[17:51:35] Input root: //10.10.10.2/trivia/archiverelated/board games
+[17:51:35] Local buffer: C:\ocrbuffer\board games (prefetch depth: 20)
+[17:51:35] Work: 510,751 new + 316,440 updates = 827,191 total
+[17:51:35] 
+[17:55:05] FATAL ERROR: The paging file is too small for this operation to complete. (os error 1455)
+[17:55:05] Traceback (most recent call last):
+  File "C:\Users\rmans\image_ocr_4070\image_ocr\pipeline.py", line 371, in run_pipeline
+    return _run_pipeline_inner(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rmans\image_ocr_4070\image_ocr\pipeline.py", line 456, in _run_pipeline_inner
+    engine.load()
+  File "C:\Users\rmans\image_ocr_4070\image_ocr\hf_engine.py", line 103, in load
+    self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rmans\AppData\Roaming\Python\Python312\site-packages\transformers\modeling_utils.py", line 4072, in from_pretrained
+    loading_info, disk_offload_index = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\rmans\AppData\Roaming\Python\Python312\site-packages\transformers\modeling_utils.py", line 4179, in _load_pretrained_model
+    file_pointer = safe_open(file, framework="pt", device="cpu")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: The paging file is too small for this operation to complete. (os error 1455)
+
+
+============================================================
+Session: 2026-03-02 18:30:59 | Input: \\10.10.10.2\trivia\archiverelated\board games | Model: qwen3-vl-8b
+============================================================
+[18:31:00] Using existing scan index (510,751 new, 316,440 updates remaining)
+[18:31:00] Input root: //10.10.10.2/trivia/archiverelated/board games
+[18:31:00] Local buffer: C:\ocrbuffer\board games (prefetch depth: 20)
+[18:31:00] Work: 510,751 new + 316,440 updates = 827,191 total
+[18:31:00] 
+[18:31:16] ── Pass 1: new images (510,751 to process) ──
+[18:31:17]   Prefetched batch 0 (50 images) -> b0000
+[18:31:18]   Prefetched batch 1 (50 images) -> b0001
+[18:31:18]   Prefetched batch 2 (50 images) -> b0002
+[18:31:19]   Prefetched batch 3 (50 images) -> b0003
+[18:31:19]   Prefetched batch 4 (50 images) -> b0004
+[18:31:21]   Prefetched batch 5 (50 images) -> b0005
+[18:31:21]   Prefetched batch 6 (50 images) -> b0006
+[18:31:22]   Prefetched batch 7 (50 images) -> b0007
+[18:31:23]   Prefetched batch 8 (50 images) -> b0008
+[18:31:23]   Prefetched batch 9 (50 images) -> b0009
+[18:31:24]   Prefetched batch 10 (50 images) -> b0010
+[18:31:24]   Prefetched batch 11 (50 images) -> b0011
+[18:31:25]   Prefetched batch 12 (50 images) -> b0012
+[18:31:26]   Prefetched batch 13 (50 images) -> b0013
+[18:31:26]   Prefetched batch 14 (50 images) -> b0014
+[18:31:27]   Prefetched batch 15 (50 images) -> b0015
+[18:31:28]   Prefetched batch 16 (50 images) -> b0016
+[18:31:28]   Prefetched batch 17 (50 images) -> b0017
+[18:31:29]   Prefetched batch 18 (50 images) -> b0018
+[18:31:30]   Prefetched batch 19 (50 images) -> b0019
+[18:31:30]   Prefetched batch 20 (50 images) -> b0020
+[18:31:31]   Prefetched batch 21 (50 images) -> b0021
+[18:56:18]   Prefetched batch 22 (50 images) -> b0022

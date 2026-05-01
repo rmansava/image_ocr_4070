@@ -9,16 +9,22 @@ DEFAULT_MAX_DIM = 1280
 
 DEFAULT_MODEL = "qwen3-vl-8b"
 
-# Model family registry — maps short names to HF model IDs
+# Model family registry — maps short names to HF model IDs and classes
 MODEL_REGISTRY = {
     "qwen3-vl-8b": {
         "hf_id": "Qwen/Qwen3-VL-8B-Instruct",
+        "model_class": "Qwen3VLForConditionalGeneration",
+        "processor_class": "Qwen3VLProcessor",
     },
     "qwen3-vl-4b": {
         "hf_id": "Qwen/Qwen3-VL-4B-Instruct",
+        "model_class": "Qwen3VLForConditionalGeneration",
+        "processor_class": "Qwen3VLProcessor",
     },
     "qwen2.5-vl-7b": {
         "hf_id": "Qwen/Qwen2.5-VL-7B-Instruct",
+        "model_class": "Qwen2_5_VLForConditionalGeneration",
+        "processor_class": "AutoProcessor",
     },
 }
 
@@ -48,6 +54,8 @@ class HFVisionEngine:
             )
 
         self.hf_id = MODEL_REGISTRY[model_name]["hf_id"]
+        self.model_class = MODEL_REGISTRY[model_name]["model_class"]
+        self.processor_class = MODEL_REGISTRY[model_name]["processor_class"]
 
         # Determine torch dtype
         if dtype == "bf16":
@@ -86,24 +94,22 @@ class HFVisionEngine:
                 "CUDA is not available. This pipeline requires a GPU."
             )
 
-        from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+        import transformers
+        model_cls = getattr(transformers, self.model_class)
+        proc_cls = getattr(transformers, self.processor_class)
 
         print(f"Loading {self.hf_id}...")
 
-        # Qwen3-VL uses same class as Qwen2.5-VL in transformers
         model_kwargs = {
             "torch_dtype": self.torch_dtype,
             "device_map": "auto",
             "attn_implementation": "sdpa",
-            "trust_remote_code": True,
         }
         if self.bnb_config:
             model_kwargs["quantization_config"] = self.bnb_config
 
-        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            self.hf_id, **model_kwargs
-        )
-        self.processor = AutoProcessor.from_pretrained(self.hf_id, trust_remote_code=True)
+        self.model = model_cls.from_pretrained(self.hf_id, **model_kwargs)
+        self.processor = proc_cls.from_pretrained(self.hf_id)
 
         if self.compile_model:
             try:

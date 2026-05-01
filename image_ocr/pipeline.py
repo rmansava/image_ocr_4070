@@ -6,6 +6,7 @@
   - Flush thread: writes .txt results to T:\\archive while GPU works on next batch
 """
 
+import io
 import os
 import shutil
 import sys
@@ -23,6 +24,10 @@ DEFAULT_BUFFER_BASE = Path(r"C:\ocrbuffer")
 DEFAULT_MAX_DIM = 1280
 PREFETCH_DEPTH = 20  # batches to keep buffered ahead of GPU
 MAX_CONSECUTIVE_ERRORS = 10  # circuit breaker: stop pass after N in a row
+DEFAULT_LOG_FILE = Path(__file__).parent.parent / "ocr_scan.log"
+
+_log_file: io.TextIOWrapper | None = None
+_log_lock = threading.Lock()
 
 
 def _status(msg: str):
@@ -31,8 +36,14 @@ def _status(msg: str):
 
 
 def _log(msg: str):
-    sys.stdout.write(f"\r\033[K{msg}\n")
+    ts = time.strftime("%H:%M:%S")
+    line = f"[{ts}] {msg}\n"
+    sys.stdout.write(f"\r\033[K{line}")
     sys.stdout.flush()
+    if _log_file is not None:
+        with _log_lock:
+            _log_file.write(line)
+            _log_file.flush()
 
 
 class _Counter:
@@ -287,21 +298,41 @@ def _run_pass(
             all_errors.append((img, f"copy: {err}"))
             counter.tick(img.name, error=True)
 
-        for local, original, _archive_txt in enriched:
-            try:
-                text = engine.infer(local, prompt)
-                results.append((original, text))
-                counter.tick(original.name)
-                consecutive_errors = 0
-            except Exception as exc:
-                consecutive_errors += 1
-                inference_errors.append((original, str(exc)))
-                counter.tick(original.name, error=True)
-                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                    circuit_broken = True
-                    _log(f"\n  CIRCUIT BREAKER: {MAX_CONSECUTIVE_ERRORS} consecutive errors — aborting pass.")
-                    _log(f"  Last error: {exc}")
-                    break
+        if hasattr(engine, "infer_batch") and enriched:
+            # Feed the whole prefetch batch to vLLM at once
+            local_paths = [local for local, _, _ in enriched]
+            original_paths = [original for _, original, _ in enriched]
+            batch_results = engine.infer_batch(local_paths, prompt)
+            for original, (text, err) in zip(original_paths, batch_results):
+                if err:
+                    consecutive_errors += 1
+                    inference_errors.append((original, err))
+                    counter.tick(original.name, error=True)
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                        circuit_broken = True
+                        _log(f"\n  CIRCUIT BREAKER: {MAX_CONSECUTIVE_ERRORS} errors in batch — aborting pass.")
+                        _log(f"  Last error: {err}")
+                        break
+                else:
+                    results.append((original, text))
+                    counter.tick(original.name)
+                    consecutive_errors = 0
+        else:
+            for local, original, _archive_txt in enriched:
+                try:
+                    text = engine.infer(local, prompt)
+                    results.append((original, text))
+                    counter.tick(original.name)
+                    consecutive_errors = 0
+                except Exception as exc:
+                    consecutive_errors += 1
+                    inference_errors.append((original, str(exc)))
+                    counter.tick(original.name, error=True)
+                    if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                        circuit_broken = True
+                        _log(f"\n  CIRCUIT BREAKER: {MAX_CONSECUTIVE_ERRORS} consecutive errors — aborting pass.")
+                        _log(f"  Last error: {exc}")
+                        break
 
         all_errors.extend(inference_errors)
         flush_q.put((results, inference_errors, model_tag, batch_dir))
@@ -331,6 +362,50 @@ def _run_pass(
 # ─── Main entry point ───────────────────────────────────────────
 
 def run_pipeline(
+    input_path: Path,
+    model_tag: str,
+    model: str,
+    batch_size: int = 50,
+    max_dim: int = DEFAULT_MAX_DIM,
+    extensions: set[str] | None = None,
+    prompt: str = DEFAULT_PROMPT,
+    dtype: str = "bf16",
+    quantize: str | None = None,
+    compile_model: bool = True,
+    buffer_dir: Path | None = None,
+    rescan: bool = False,
+    log_file: Path | None = DEFAULT_LOG_FILE,
+) -> list[tuple[Path, str]]:
+    global _log_file
+    if log_file is not None:
+        _log_file = open(log_file, "a", encoding="utf-8")
+        _log_file.write(
+            f"\n{'='*60}\n"
+            f"Session: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            f" | Input: {input_path} | Model: {model_tag} | Engine: {model}\n"
+            f"{'='*60}\n"
+        )
+        _log_file.flush()
+
+    try:
+        return _run_pipeline_inner(
+            input_path=input_path, model_tag=model_tag, model=model,
+            batch_size=batch_size, max_dim=max_dim, extensions=extensions,
+            prompt=prompt, dtype=dtype, quantize=quantize,
+            compile_model=compile_model, buffer_dir=buffer_dir, rescan=rescan,
+        )
+    except Exception as exc:
+        import traceback
+        _log(f"FATAL ERROR: {exc}")
+        _log(traceback.format_exc())
+        raise
+    finally:
+        if _log_file is not None:
+            _log_file.close()
+            _log_file = None
+
+
+def _run_pipeline_inner(
     input_path: Path,
     model_tag: str,
     model: str,
@@ -392,12 +467,15 @@ def run_pipeline(
         return []
 
     # ── Step 2: Load model ──
-    from .hf_engine import HFVisionEngine
-
-    engine = HFVisionEngine(
-        model_name=model, dtype=dtype, quantize=quantize,
-        max_dim=max_dim, compile_model=compile_model,
-    )
+    if model == "vllm":
+        from .vllm_engine import VLLMEngine
+        engine = VLLMEngine(max_dim=max_dim)
+    else:
+        from .hf_engine import HFVisionEngine
+        engine = HFVisionEngine(
+            model_name=model, dtype=dtype, quantize=quantize,
+            max_dim=max_dim, compile_model=compile_model,
+        )
     engine.load()
 
     # ── Step 3: Process ──

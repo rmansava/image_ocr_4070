@@ -19,7 +19,7 @@ from pathlib import Path
 import requests
 
 # NAS connection settings
-NAS_IP = "10.10.10.2"
+NAS_IP = "192.168.1.53"
 NAS_PORT = "5000"
 NAS_USER = "larry"
 NAS_PASS = "olliegussywalter3C"

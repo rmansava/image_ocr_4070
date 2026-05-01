@@ -181,6 +181,7 @@ def _scan_via_api(
     nas.logout()
 
     # Build archive index: {str(archive_dir): {stem_lower: Path}}
+    log_fn(f"  Phase 2: building archive index from {len(txt_paths):,} .txt paths...")
     archive_index = defaultdict(dict)
     for unc_path in txt_paths:
         p = Path(unc_path)
@@ -444,10 +445,16 @@ def scan_to_db(
     def _write_phase1(image_paths, dir_images):
         """Bulk-write all image paths to DB with pass_num=0 as a checkpoint.
 
-        After this, a restart can skip Phase 1 (NAS image search) entirely.
-        Rows already in existing_paths are skipped.
+        Uses a staging table to avoid slow per-row MERGE or broad cross-root SELECTs:
+          1. Bulk INSERT candidates into #phase1_stage (no unique constraint — fast)
+          2. Set-based INSERT WHERE NOT EXISTS from stage → ocr_images (SQL Server optimizes)
+          3. Load all pass_num=0 rows for this root into phase1_paths
         """
         nonlocal phase1_paths
+
+        log_fn(f"  Phase 1 checkpoint: preparing {len(image_paths):,} paths...")
+
+        # Build candidate rows — skip already-classified images for this root
         rows = []
         for img_str in image_paths:
             if img_str in existing_paths:
@@ -455,21 +462,72 @@ def scan_to_db(
             p = Path(img_str)
             archive_txt = str(map_to_archive(p).with_suffix(".txt"))
             rows.append((img_str, input_root, archive_txt, 0, False, None))
-            phase1_paths.add(img_str)
+
         if rows:
-            cur.fast_executemany = True
-            # Use MERGE to skip rows already indexed under a different input_root
-            cur.executemany(
-                "MERGE ocr_images AS t "
-                "USING (SELECT ? AS ip, ? AS ir, ? AS at, ? AS pn, ? AS pr, ? AS er) AS s "
-                "ON t.image_path = s.ip "
-                "WHEN NOT MATCHED THEN INSERT (image_path, input_root, archive_txt, pass_num, processed, error) "
-                "VALUES(s.ip, s.ir, s.at, s.pn, s.pr, s.er);",
-                rows,
-            )
+            # Sort longest paths first so fast_executemany sizes its buffer correctly.
+            # fast_executemany infers column widths from the first row — if a later row
+            # has a longer string it raises "String data, right truncation".
+            rows.sort(key=lambda r: len(r[0]), reverse=True)
+
+            # Step 1: create a temp staging table (no unique constraint → no conflict checks).
+            # Use bounded NVARCHAR (not MAX) so fast_executemany can size buffers correctly.
+            cur.execute("""
+                CREATE TABLE #phase1_stage (
+                    image_path  NVARCHAR(800)  NOT NULL,
+                    input_root  NVARCHAR(200)  NOT NULL,
+                    archive_txt NVARCHAR(1000) NOT NULL,
+                    pass_num    INT            NOT NULL,
+                    processed   BIT            NOT NULL,
+                    error       NVARCHAR(10)   NULL
+                )
+            """)
             conn.commit()
+
+            # Step 2: bulk INSERT into staging.
+            # Use fast_executemany=False here — the staging table has no indexes so
+            # per-row inserts are fast, and fast_executemany mis-sizes buffers for
+            # long NVARCHAR strings causing "String data, right truncation" errors.
+            log_fn(f"  Phase 1 checkpoint: staging {len(rows):,} paths...")
+            cur.fast_executemany = False
+            chunk_size = 50_000
+            for i in range(0, len(rows), chunk_size):
+                chunk = rows[i:i + chunk_size]
+                cur.executemany(
+                    "INSERT INTO #phase1_stage VALUES(?, ?, ?, ?, ?, ?)", chunk
+                )
+                conn.commit()
+                done = min(i + chunk_size, len(rows))
+                log_fn(f"  Phase 1 checkpoint: {done:,}/{len(rows):,} staged...")
+            cur.fast_executemany = True  # re-enable for Phase 3 batch operations
+
+            # Step 3: set-based INSERT WHERE NOT EXISTS — SQL Server handles dedup
+            log_fn(f"  Phase 1 checkpoint: committing to ocr_images (deduplicating)...")
+            cur.execute("""
+                INSERT INTO ocr_images
+                    (image_path, input_root, archive_txt, pass_num, processed, error)
+                SELECT s.image_path, s.input_root, s.archive_txt,
+                       s.pass_num, s.processed, s.error
+                FROM #phase1_stage s
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM ocr_images t WHERE t.image_path = s.image_path
+                )
+            """)
+            conn.commit()
+            cur.execute("DROP TABLE #phase1_stage")
+            conn.commit()
+
+        # Load all pass_num=0 rows for this root → phase1_paths
+        # (newly inserted rows + any survivors from a partial previous Phase 1)
+        cur.execute(
+            "SELECT image_path FROM ocr_images WHERE input_root=? AND pass_num=0",
+            (input_root,),
+        )
+        phase1_paths.update(row[0] for row in cur.fetchall())
+
         set_scan_meta(input_root, "scan_time", "phase1_complete")
-        log_fn(f"  Phase 1 checkpoint: {len(phase1_paths):,} new images written to DB")
+        log_fn(
+            f"  Phase 1 checkpoint: {len(phase1_paths):,} images tracked, scan resumable"
+        )
 
     def _classify_dir(folder, image_names, archive_dir, archive_stems):
         """Classify images in one source directory against the archive.
@@ -515,9 +573,15 @@ def scan_to_db(
                 updates,
             )
         if inserts:
+            # Use MERGE instead of INSERT so rows already indexed under a
+            # different input_root (e.g. from a previous test scan) are
+            # silently skipped rather than crashing with a duplicate-key error.
             cur.executemany(
-                "INSERT INTO ocr_images(image_path, input_root, archive_txt, pass_num, processed, error) "
-                "VALUES(?, ?, ?, ?, ?, ?)",
+                "MERGE ocr_images AS t "
+                "USING (SELECT ? AS ip, ? AS ir, ? AS at, ? AS pn, ? AS pr, ? AS er) AS s "
+                "ON t.image_path = s.ip "
+                "WHEN NOT MATCHED THEN INSERT (image_path, input_root, archive_txt, pass_num, processed, error) "
+                "VALUES(s.ip, s.ir, s.at, s.pn, s.pr, s.er);",
                 inserts,
             )
         conn.commit()

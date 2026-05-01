@@ -26,17 +26,18 @@ echo.
 echo Scanning: %SCAN_DIR% (all subfolders)
 echo.
 
-:loop
-python -m image_ocr "%SCAN_DIR%"
+python -m image_ocr "%SCAN_DIR%" --quantize 4bit
 if %errorlevel% equ 0 goto done
 
 echo.
-echo [%date% %time%] Pipeline exited with error code %errorlevel%. Restarting in 30 seconds...
-echo.
-timeout /t 30 /nobreak >NUL
-goto loop
+echo [%date% %time%] Pipeline exited with error code %errorlevel%.
+echo Check ocr_scan.log for details.
+echo Re-run this script to resume.
+goto end
 
 :done
 echo.
 echo Pipeline finished successfully.
+
+:end
 pause

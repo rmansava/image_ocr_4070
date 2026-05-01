@@ -5,11 +5,12 @@ from pathlib import Path
 
 from .hf_engine import DEFAULT_MODEL
 DEFAULT_PROMPT = (
-    "OCR: <extract all text and brands>. "
-    "DESCRIPTION: <Describe subjects and their actions or spatial relationships. "
-    "Example: '3 cows on top of a hill', 'dog riding a sled', or "
-    "'bottle of coke sitting on a table'. No colors, no styles, no flowery language.>"
+    "1. List all visible text and brand names from this image, including fine print.\n"
+    "2. Describe the image in detail: all subjects, objects, their positions and spatial "
+    "relationships, any actions or interactions, and notable visual elements. "
+    "Be specific and complete."
 )
+VLLM_PROMPT = DEFAULT_PROMPT  # same prompt, vllm engine handles rep_penalty internally
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -25,11 +26,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Image file or directory to process.",
     )
 
-    # Model selection
+    # Engine / model selection
+    parser.add_argument(
+        "--engine",
+        choices=["hf", "vllm"],
+        default="hf",
+        help="Inference engine: 'hf' = HuggingFace (default), 'vllm' = vLLM server (fast batched).",
+    )
     parser.add_argument(
         "--model",
         default=DEFAULT_MODEL,
-        help=f"Model short name (default: {DEFAULT_MODEL}). Use --list-models to see all options.",
+        help=f"Model short name for HF engine (default: {DEFAULT_MODEL}). Ignored when --engine vllm.",
     )
     parser.add_argument(
         "--model-tag",
@@ -89,6 +96,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Force a fresh scan of the input directory (rebuilds the DB index).",
     )
     parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=None,
+        help=r"Path to log file (default: ocr_scan.log next to this package). Pass empty string to disable.",
+    )
+    parser.add_argument(
+        "--no-log",
+        action="store_true",
+        help="Disable file logging (log to console only).",
+    )
+    parser.add_argument(
         "--list-models",
         action="store_true",
         help="List available models and exit.",
@@ -120,18 +138,31 @@ def main(argv: list[str] | None = None) -> int:
     if args.ext:
         extensions = {f".{e.lstrip('.').lower()}" for e in args.ext}
 
-    model = args.model
-    model_tag = args.model_tag or model
+    engine = args.engine
+    model = "vllm" if engine == "vllm" else args.model
+    model_tag = args.model_tag or ("qwen3-vl-8b-vllm" if engine == "vllm" else model)
     compile_model = not args.no_compile
     compile_str = "on" if compile_model else "off"
     buffer_dir = args.buffer_dir.resolve() if args.buffer_dir else None
 
-    from .pipeline import run_pipeline
+    from .pipeline import run_pipeline, DEFAULT_LOG_FILE
+
+    if args.no_log:
+        log_file = None
+    elif args.log_file is not None:
+        log_file = args.log_file.resolve()
+    else:
+        log_file = DEFAULT_LOG_FILE
 
     print(f"Input: {input_path}")
-    print(f"Model: {model} [{model_tag}]")
-    print(f"Dtype: {args.dtype} | Quantize: {args.quantize or 'none'} | Compile: {compile_str}")
+    if engine == "vllm":
+        print(f"Engine: vLLM (batched) | Tag: {model_tag}")
+    else:
+        print(f"Engine: HuggingFace | Model: {model} [{model_tag}]")
+        print(f"Dtype: {args.dtype} | Quantize: {args.quantize or 'none'} | Compile: {compile_str}")
     print(f"Prompt: {args.prompt[:80]}{'...' if len(args.prompt) > 80 else ''}")
+    if log_file:
+        print(f"Log file: {log_file}")
     print("Progress saved after each batch. Ctrl+C to stop, re-run to resume.\n")
 
     errors = run_pipeline(
@@ -147,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
         compile_model=compile_model,
         buffer_dir=buffer_dir,
         rescan=args.rescan,
+        log_file=log_file,
     )
 
     return 1 if errors else 0
